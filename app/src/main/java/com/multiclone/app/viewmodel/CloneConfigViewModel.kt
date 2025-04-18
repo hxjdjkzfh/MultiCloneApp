@@ -1,126 +1,119 @@
 package com.multiclone.app.viewmodel
 
-import android.content.Context
 import android.graphics.Bitmap
-import android.net.Uri
+import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.multiclone.app.data.model.AppInfo
-import com.multiclone.app.data.model.CloneInfo
 import com.multiclone.app.data.repository.AppRepository
+import com.multiclone.app.data.repository.CloneRepository
 import com.multiclone.app.domain.usecase.CreateCloneUseCase
 import com.multiclone.app.domain.usecase.CreateShortcutUseCase
-import com.multiclone.app.utils.IconUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+/**
+ * ViewModel for the clone configuration screen
+ */
 @HiltViewModel
 class CloneConfigViewModel @Inject constructor(
     private val appRepository: AppRepository,
+    private val cloneRepository: CloneRepository,
     private val createCloneUseCase: CreateCloneUseCase,
     private val createShortcutUseCase: CreateShortcutUseCase
 ) : ViewModel() {
-    private val _appInfo = MutableStateFlow<AppInfo?>(null)
-    val appInfo: StateFlow<AppInfo?> = _appInfo.asStateFlow()
     
-    private val _cloneName = MutableStateFlow("")
-    val cloneName: StateFlow<String> = _cloneName.asStateFlow()
+    // UI state for the clone configuration screen
+    private val _uiState = MutableStateFlow(CloneConfigUiState())
+    val uiState: StateFlow<CloneConfigUiState> = _uiState.asStateFlow()
     
-    private val _customIcon = MutableStateFlow<Bitmap?>(null)
-    val customIcon: StateFlow<Bitmap?> = _customIcon.asStateFlow()
-    
-    private val _isCreatingClone = MutableStateFlow(false)
-    val isCreatingClone: StateFlow<Boolean> = _isCreatingClone.asStateFlow()
-    
-    private val _isCloneCreated = MutableStateFlow(false)
-    val isCloneCreated: StateFlow<Boolean> = _isCloneCreated.asStateFlow()
-    
-    private val _errorMessage = MutableStateFlow("")
-    val errorMessage: StateFlow<String> = _errorMessage.asStateFlow()
-    
-    fun loadAppInfo(packageName: String) {
+    /**
+     * Initialize the UI state with the selected package
+     */
+    fun initialize(packageName: String) {
         viewModelScope.launch {
-            try {
-                val info = appRepository.getAppInfo(packageName)
-                _appInfo.value = info
-                
-                if (info != null) {
-                    // Set default clone name
-                    _cloneName.value = "Clone - ${info.name}"
-                }
-            } catch (e: Exception) {
-                _errorMessage.value = e.message ?: "Failed to load app info"
-            }
-        }
-    }
-    
-    fun onCloneNameChanged(name: String) {
-        _cloneName.value = name
-    }
-    
-    fun onCustomIconSelected(uri: Uri, context: Context) {
-        viewModelScope.launch {
-            try {
-                val bitmap = IconUtils.loadBitmapFromUri(uri, context)
-                _customIcon.value = bitmap
-            } catch (e: Exception) {
-                _errorMessage.value = "Failed to load icon: ${e.message}"
-            }
-        }
-    }
-    
-    fun createClone(context: Context) {
-        val app = _appInfo.value ?: return
-        val name = _cloneName.value
-        
-        // Validate input
-        val validationError = createCloneUseCase.validateCloneParams(app.packageName, name)
-        if (validationError != null) {
-            _errorMessage.value = validationError
-            return
-        }
-        
-        viewModelScope.launch {
-            _isCreatingClone.value = true
+            _uiState.update { it.copy(isLoading = true) }
             
             try {
-                createCloneUseCase(
-                    packageName = app.packageName,
-                    cloneName = name,
-                    customIcon = _customIcon.value
-                ).fold(
-                    onSuccess = { cloneInfo ->
-                        // Create shortcut
-                        createShortcutForClone(cloneInfo, context)
-                        _isCloneCreated.value = true
-                    },
-                    onFailure = { throwable ->
-                        _errorMessage.value = throwable.message ?: "Failed to create clone"
-                    }
-                )
+                val appInfo = appRepository.getAppInfo(packageName)
+                _uiState.update { 
+                    it.copy(
+                        isLoading = false,
+                        originalAppName = appInfo.appName,
+                        originalAppIcon = appInfo.icon
+                    )
+                }
             } catch (e: Exception) {
-                _errorMessage.value = e.message ?: "An unexpected error occurred"
-            } finally {
-                _isCreatingClone.value = false
+                _uiState.update { 
+                    it.copy(
+                        isLoading = false,
+                        error = e.message ?: "Failed to load app information"
+                    )
+                }
             }
         }
     }
     
-    private suspend fun createShortcutForClone(cloneInfo: CloneInfo, context: Context) {
-        createShortcutUseCase(cloneInfo, context).fold(
-            onSuccess = { /* Shortcut created successfully */ },
-            onFailure = { throwable ->
-                // We still consider the clone creation successful even if shortcut creation fails
-                _errorMessage.value = "Clone created successfully, but shortcut creation failed: ${throwable.message}"
+    /**
+     * Create a new clone of the app
+     */
+    fun createClone(
+        packageName: String,
+        cloneName: String,
+        customIconColor: Color,
+        createShortcut: Boolean
+    ) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isCreatingClone = true) }
+            
+            try {
+                // Create the clone
+                val cloneInfo = createCloneUseCase.execute(
+                    packageName = packageName,
+                    cloneName = cloneName,
+                    customIconColorHex = String.format("#%06X", 0xFFFFFF and customIconColor.hashCode())
+                )
+                
+                // Create a shortcut if requested
+                if (createShortcut) {
+                    createShortcutUseCase.execute(cloneInfo)
+                    
+                    // Update shortcut status
+                    val updatedClone = cloneInfo.copy(hasShortcut = true)
+                    cloneRepository.updateClone(updatedClone)
+                }
+                
+                // Update UI state
+                _uiState.update { 
+                    it.copy(
+                        isCreatingClone = false,
+                        cloneCreated = true
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.update { 
+                    it.copy(
+                        isCreatingClone = false,
+                        error = e.message ?: "Failed to create clone"
+                    )
+                }
             }
-        )
-    }
-    
-    fun clearErrorMessage() {
-        _errorMessage.value = ""
+        }
     }
 }
+
+/**
+ * UI state for clone configuration screen
+ */
+data class CloneConfigUiState(
+    val isLoading: Boolean = false,
+    val originalAppName: String = "",
+    val originalAppIcon: Bitmap? = null,
+    val isCreatingClone: Boolean = false,
+    val cloneCreated: Boolean = false,
+    val error: String? = null
+)

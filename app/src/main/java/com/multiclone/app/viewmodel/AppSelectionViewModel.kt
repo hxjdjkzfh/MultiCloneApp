@@ -12,55 +12,61 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+/**
+ * ViewModel for the app selection screen
+ */
 @HiltViewModel
 class AppSelectionViewModel @Inject constructor(
     private val getInstalledAppsUseCase: GetInstalledAppsUseCase
 ) : ViewModel() {
-    private val _installedApps = MutableStateFlow<List<AppInfo>>(emptyList())
-    val installedApps: StateFlow<List<AppInfo>> = _installedApps.asStateFlow()
     
-    private val _filteredApps = MutableStateFlow<List<AppInfo>>(emptyList())
-    val filteredApps: StateFlow<List<AppInfo>> = _filteredApps.asStateFlow()
+    // UI state for the app selection screen
+    private val _uiState = MutableStateFlow(AppSelectionUiState())
+    val uiState: StateFlow<AppSelectionUiState> = _uiState.asStateFlow()
     
-    private val _isLoading = MutableStateFlow(false)
-    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+    init {
+        loadInstalledApps()
+    }
     
-    private val _searchQuery = MutableStateFlow("")
-    val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
-    
-    private val _errorMessage = MutableStateFlow("")
-    val errorMessage: StateFlow<String> = _errorMessage.asStateFlow()
-    
-    fun loadInstalledApps() {
+    /**
+     * Load all installed apps
+     */
+    private fun loadInstalledApps() {
         viewModelScope.launch {
-            _isLoading.value = true
+            _uiState.update { it.copy(isLoading = true) }
             
             try {
-                getInstalledAppsUseCase(onlyUserApps = true).fold(
-                    onSuccess = { apps ->
-                        _installedApps.value = apps
-                        _filteredApps.value = apps
-                    },
-                    onFailure = { throwable ->
-                        _errorMessage.value = throwable.message ?: "Failed to load installed apps"
-                    }
-                )
+                val installedApps = getInstalledAppsUseCase.execute()
+                _uiState.update { 
+                    it.copy(
+                        isLoading = false,
+                        installedApps = installedApps.sortedBy { app -> app.appName }
+                    )
+                }
             } catch (e: Exception) {
-                _errorMessage.value = e.message ?: "An unexpected error occurred"
-            } finally {
-                _isLoading.value = false
+                _uiState.update { 
+                    it.copy(
+                        isLoading = false,
+                        error = e.message ?: "Failed to load installed apps"
+                    )
+                }
             }
         }
     }
     
-    fun onSearchQueryChanged(query: String) {
-        _searchQuery.value = query
-        _filteredApps.update { 
-            getInstalledAppsUseCase.filterApps(_installedApps.value, query)
-        }
-    }
-    
-    fun clearErrorMessage() {
-        _errorMessage.value = ""
+    /**
+     * Refresh the list of installed apps
+     */
+    fun refreshApps() {
+        loadInstalledApps()
     }
 }
+
+/**
+ * UI state for app selection screen
+ */
+data class AppSelectionUiState(
+    val isLoading: Boolean = false,
+    val installedApps: List<AppInfo> = emptyList(),
+    val error: String? = null
+)
