@@ -1,23 +1,38 @@
 package com.multiclone.app.data.model
 
 import android.graphics.Bitmap
+import android.os.Parcelable
+import kotlinx.parcelize.Parcelize
 import java.util.UUID
 
 /**
- * Represents information about a cloned application
+ * Data class representing information about a cloned app
+ *
+ * @property id Unique identifier for the clone
+ * @property packageName The package name of the original app
+ * @property originalAppName The display name of the original app
+ * @property customName The custom name for the clone (optional)
+ * @property icon The custom icon bitmap for the clone (optional)
+ * @property cloneIndex The index of this clone (for multiple clones of the same app)
+ * @property createdAt Timestamp when this clone was created
+ * @property lastUsedAt Timestamp when this clone was last used
  */
+@Parcelize
 data class CloneInfo(
     val id: String = UUID.randomUUID().toString(),
     val packageName: String,
     val originalAppName: String,
-    val cloneName: String,
-    val customIcon: Bitmap? = null,
-    val creationTime: Long = System.currentTimeMillis(),
-    val lastUsedTime: Long = 0L,
-    val hasShortcut: Boolean = false,
-    val environmentId: String = id, // Environment ID may differ from clone ID for security
-    val badgeNumber: String? = "2", // Badge number to show on the icon
-    val launchCount: Int? = 0, // Number of times this clone has been launched
-    val isEnabled: Boolean = true, // Whether this clone is currently enabled
-    val storagePath: String? = null // Custom storage path if applicable
-)
+    val customName: String? = null,
+    val icon: Bitmap? = null,
+    val cloneIndex: Int = 1,
+    val createdAt: Long = System.currentTimeMillis(),
+    val lastUsedAt: Long = System.currentTimeMillis()
+) : Parcelable {
+    
+    /**
+     * Gets the display name for the clone
+     * Uses the custom name if set, otherwise uses the original app name with clone index
+     */
+    val displayName: String
+        get() = customName ?: "$originalAppName ($cloneIndex)"
+}

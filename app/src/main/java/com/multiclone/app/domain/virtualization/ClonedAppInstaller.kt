@@ -4,183 +4,217 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
-import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
+import java.util.zip.ZipEntry
+import java.util.zip.ZipFile
+import java.util.zip.ZipOutputStream
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Handles installation and resource extraction for cloned applications
+ * Handles the extraction, modification, and installation of cloned apps
  */
 @Singleton
 class ClonedAppInstaller @Inject constructor(
-    @ApplicationContext private val context: Context
+    private val context: Context
 ) {
-    companion object {
-        private const val TAG = "ClonedAppInstaller"
-        private const val APP_METADATA_FILE = "app_metadata.json"
+    private val TAG = "ClonedAppInstaller"
+    
+    // Directory for extracting and storing app packages
+    private val appsDir by lazy {
+        File(context.filesDir, "app_packages").apply {
+            if (!exists()) {
+                mkdirs()
+            }
+        }
     }
-
+    
     /**
-     * Extracts resources from an installed app to the cloned environment
-     *
-     * @param packageName The package name of the app to extract from
-     * @param environmentPath The path to the clone environment
-     * @return A Result indicating success or failure
+     * Install a cloned version of the app
+     * 
+     * @param packageName The package name of the original app
+     * @param cloneIndex The index of this clone (for multiple clones of the same app)
+     * @return True if installation was successful, false otherwise
      */
-    suspend fun extractAppResources(
-        packageName: String,
-        environmentPath: String
-    ): Result<Unit> = withContext(Dispatchers.IO) {
+    suspend fun installClonedApp(packageName: String, cloneIndex: Int): Boolean = withContext(Dispatchers.IO) {
         try {
-            Log.i(TAG, "Extracting app resources for $packageName to $environmentPath")
+            // Get the source APK path
+            val sourceApkPath = getSourceApkPath(packageName)
+            if (sourceApkPath.isNullOrEmpty()) {
+                Log.e(TAG, "Source APK not found for package: $packageName")
+                return@withContext false
+            }
             
-            val packageManager = context.packageManager
+            // Extract and modify the APK
+            val modifiedApkFile = modifyApk(packageName, sourceApkPath, cloneIndex)
+            if (modifiedApkFile == null) {
+                Log.e(TAG, "Failed to modify APK for package: $packageName")
+                return@withContext false
+            }
             
-            // Get package info
+            // In a real implementation, we would install the modified APK here
+            // For this implementation, we'll simulate successful installation
+            simulateInstallation(packageName, cloneIndex)
+            
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Error installing cloned app", e)
+            false
+        }
+    }
+    
+    /**
+     * Get the path to the original app's APK file
+     */
+    private fun getSourceApkPath(packageName: String): String? {
+        return try {
             val packageInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                packageManager.getPackageInfo(
-                    packageName,
-                    PackageManager.PackageInfoFlags.of(
-                        (PackageManager.GET_META_DATA).toLong()
-                    )
-                )
+                context.packageManager.getPackageInfo(packageName, PackageManager.PackageInfoFlags.of(0))
             } else {
                 @Suppress("DEPRECATION")
-                packageManager.getPackageInfo(
-                    packageName,
-                    PackageManager.GET_META_DATA
-                )
+                context.packageManager.getPackageInfo(packageName, 0)
             }
             
-            // Get application info
-            val applicationInfo = packageInfo.applicationInfo
-            
-            // Create metadata JSON
-            val metadata = JSONObject().apply {
-                put("packageName", packageName)
-                put("appName", applicationInfo.loadLabel(packageManager).toString())
-                put("versionName", packageInfo.versionName ?: "")
-                put("versionCode", if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                    packageInfo.longVersionCode
-                } else {
-                    @Suppress("DEPRECATION")
-                    packageInfo.versionCode.toLong()
-                })
-                put("sourceDir", applicationInfo.sourceDir)
-                put("dataDir", applicationInfo.dataDir)
-                put("nativeLibraryDir", applicationInfo.nativeLibraryDir)
-                put("extractTime", System.currentTimeMillis())
-            }
-            
-            // Write metadata to file
-            val metadataFile = File(environmentPath, APP_METADATA_FILE)
-            FileOutputStream(metadataFile).use { stream ->
-                stream.write(metadata.toString(2).toByteArray())
-            }
-            
-            // Create directories for app resources
-            val resourcesDir = File(environmentPath, "resources")
-            if (!resourcesDir.exists() && !resourcesDir.mkdirs()) {
-                Log.e(TAG, "Failed to create resources directory")
-                return@withContext Result.failure(Exception("Failed to create resources directory"))
-            }
-            
-            // Extract app icon to resources directory
-            val iconDrawable = packageManager.getApplicationIcon(packageName)
-            val iconFile = File(resourcesDir, "app_icon.png")
-            
-            // We'll just record that we extracted the icon, as the actual bitmap extraction
-            // requires more complex code that would draw the drawable to a bitmap and save it
-            Log.d(TAG, "Extracted app icon to ${iconFile.absolutePath}")
-            
-            // Extract app resources from APK (this would be much more complex in a real app)
-            // For demonstration purposes, we'll just record that we did this
-            Log.d(TAG, "Extracted app resources from ${applicationInfo.sourceDir}")
-            
-            Log.i(TAG, "App resources extracted successfully")
-            
-            return@withContext Result.success(Unit)
+            packageInfo.applicationInfo.sourceDir
         } catch (e: Exception) {
-            Log.e(TAG, "Error extracting app resources", e)
-            return@withContext Result.failure(e)
+            Log.e(TAG, "Error getting source APK path", e)
+            null
         }
     }
-
+    
     /**
-     * Gets metadata for a cloned app
-     *
-     * @param environmentPath The path to the clone environment
-     * @return The app metadata as a JSONObject, or null if not found
+     * Extract, modify, and repackage the APK for cloning
      */
-    suspend fun getAppMetadata(environmentPath: String): JSONObject? = withContext(Dispatchers.IO) {
+    private fun modifyApk(packageName: String, sourceApkPath: String, cloneIndex: Int): File? {
         try {
-            val metadataFile = File(environmentPath, APP_METADATA_FILE)
-            if (!metadataFile.exists()) {
-                Log.e(TAG, "Metadata file not found: ${metadataFile.absolutePath}")
-                return@withContext null
+            // Create a directory for this extraction
+            val extractDir = File(appsDir, "${packageName}_$cloneIndex")
+            if (extractDir.exists()) {
+                extractDir.deleteRecursively()
             }
+            extractDir.mkdirs()
             
-            val metadataJson = metadataFile.readText()
-            return@withContext JSONObject(metadataJson)
+            // In a real implementation, we would:
+            // 1. Extract the APK
+            // 2. Modify the AndroidManifest.xml to change the package name
+            // 3. Update resources
+            // 4. Repackage into a new APK
+            // 5. Sign the APK
+            
+            // For this simulation, we'll just create a dummy file
+            val modifiedApkFile = File(extractDir, "modified_${packageName}_$cloneIndex.apk")
+            // Copy the original APK (in a real implementation, this would be the modified APK)
+            File(sourceApkPath).copyTo(modifiedApkFile, overwrite = true)
+            
+            return modifiedApkFile
         } catch (e: Exception) {
-            Log.e(TAG, "Error getting app metadata", e)
-            return@withContext null
-        }
-    }
-
-    /**
-     * Updates metadata for a cloned app
-     *
-     * @param environmentPath The path to the clone environment
-     * @param metadata The new metadata
-     * @return A Result indicating success or failure
-     */
-    suspend fun updateAppMetadata(
-        environmentPath: String,
-        metadata: JSONObject
-    ): Result<Unit> = withContext(Dispatchers.IO) {
-        try {
-            val metadataFile = File(environmentPath, APP_METADATA_FILE)
-            
-            // Write metadata to file
-            FileOutputStream(metadataFile).use { stream ->
-                stream.write(metadata.toString(2).toByteArray())
-            }
-            
-            Log.d(TAG, "Updated app metadata: ${metadataFile.absolutePath}")
-            
-            return@withContext Result.success(Unit)
-        } catch (e: Exception) {
-            Log.e(TAG, "Error updating app metadata", e)
-            return@withContext Result.failure(e)
-        }
-    }
-
-    /**
-     * Gets the icon file for a cloned app
-     *
-     * @param environmentPath The path to the clone environment
-     * @return The icon file, or null if not found
-     */
-    fun getAppIconFile(environmentPath: String): File? {
-        try {
-            val resourcesDir = File(environmentPath, "resources")
-            val iconFile = File(resourcesDir, "app_icon.png")
-            
-            if (!iconFile.exists()) {
-                Log.e(TAG, "App icon file not found: ${iconFile.absolutePath}")
-                return null
-            }
-            
-            return iconFile
-        } catch (e: Exception) {
-            Log.e(TAG, "Error getting app icon file", e)
+            Log.e(TAG, "Error modifying APK", e)
             return null
+        }
+    }
+    
+    /**
+     * Since we can't actually install apps in this demonstration,
+     * this method simulates a successful installation
+     */
+    private fun simulateInstallation(packageName: String, cloneIndex: Int) {
+        // Create a marker file to indicate the app is "installed"
+        val installMarker = File(appsDir, "installed_${packageName}_$cloneIndex")
+        installMarker.createNewFile()
+        
+        // Write some installation metadata
+        val metadata = """
+            {
+              "packageName": "$packageName",
+              "cloneIndex": $cloneIndex,
+              "installTime": ${System.currentTimeMillis()},
+              "status": "installed"
+            }
+        """.trimIndent()
+        
+        installMarker.writeText(metadata)
+        
+        Log.d(TAG, "Simulated installation of clone $cloneIndex for package $packageName")
+    }
+    
+    /**
+     * Check if a clone is already installed
+     */
+    fun isCloneInstalled(packageName: String, cloneIndex: Int): Boolean {
+        val installMarker = File(appsDir, "installed_${packageName}_$cloneIndex")
+        return installMarker.exists()
+    }
+    
+    /**
+     * Extract a single file from a ZIP (APK) file
+     */
+    private fun extractFileFromZip(zipFilePath: String, fileName: String, outputFile: File): Boolean {
+        try {
+            ZipFile(zipFilePath).use { zip ->
+                val entry = zip.entries().asSequence().find { it.name == fileName }
+                
+                if (entry != null) {
+                    zip.getInputStream(entry).use { input ->
+                        FileOutputStream(outputFile).use { output ->
+                            input.copyTo(output)
+                            return true
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error extracting file from ZIP", e)
+        }
+        return false
+    }
+    
+    /**
+     * Add a file to a ZIP (APK) file
+     */
+    private fun addFileToZip(zipFilePath: String, fileName: String, fileContent: ByteArray): Boolean {
+        try {
+            // Read the existing ZIP file
+            val tempFile = File.createTempFile("temp_", ".zip")
+            val existingEntries = mutableListOf<ZipEntry>()
+            val existingContents = mutableMapOf<ZipEntry, ByteArray>()
+            
+            ZipFile(zipFilePath).use { zip ->
+                zip.entries().asSequence().forEach { entry ->
+                    if (entry.name != fileName) {  // Skip the file we want to replace
+                        existingEntries.add(entry)
+                        zip.getInputStream(entry).use { input ->
+                            existingContents[entry] = input.readBytes()
+                        }
+                    }
+                }
+            }
+            
+            // Create a new ZIP file with the modified content
+            ZipOutputStream(FileOutputStream(tempFile)).use { zipOut ->
+                // Add existing entries
+                for (entry in existingEntries) {
+                    zipOut.putNextEntry(ZipEntry(entry.name))
+                    zipOut.write(existingContents[entry])
+                    zipOut.closeEntry()
+                }
+                
+                // Add the new/modified file
+                zipOut.putNextEntry(ZipEntry(fileName))
+                zipOut.write(fileContent)
+                zipOut.closeEntry()
+            }
+            
+            // Replace the original ZIP file
+            tempFile.copyTo(File(zipFilePath), overwrite = true)
+            tempFile.delete()
+            
+            return true
+        } catch (e: Exception) {
+            Log.e(TAG, "Error adding file to ZIP", e)
+            return false
         }
     }
 }

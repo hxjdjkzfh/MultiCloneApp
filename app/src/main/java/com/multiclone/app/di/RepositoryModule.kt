@@ -1,9 +1,9 @@
 package com.multiclone.app.di
 
 import android.content.Context
-import com.multiclone.app.data.repository.AppRepository
-import com.multiclone.app.data.repository.CloneRepository
-import com.multiclone.app.utils.IconUtils
+import com.multiclone.app.domain.virtualization.CloneEnvironment
+import com.multiclone.app.domain.virtualization.ClonedAppInstaller
+import com.multiclone.app.domain.virtualization.VirtualAppEngine
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -12,26 +12,48 @@ import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 
 /**
- * Hilt module to provide repository-level dependencies
+ * Dagger/Hilt module that provides repository and virtualization dependencies
  */
 @Module
 @InstallIn(SingletonComponent::class)
 object RepositoryModule {
-    
-    @Provides
+
+    /**
+     * Provides the CloneEnvironment instance
+     */
     @Singleton
-    fun provideAppRepository(
-        @ApplicationContext context: Context,
-        iconUtils: IconUtils
-    ): AppRepository {
-        return AppRepository(context, iconUtils)
-    }
-    
     @Provides
-    @Singleton
-    fun provideCloneRepository(
+    fun provideCloneEnvironment(
         @ApplicationContext context: Context
-    ): CloneRepository {
-        return CloneRepository(context)
+    ): CloneEnvironment {
+        return CloneEnvironment(context)
+    }
+
+    /**
+     * Provides the ClonedAppInstaller instance
+     */
+    @Singleton
+    @Provides
+    fun provideClonedAppInstaller(
+        @ApplicationContext context: Context
+    ): ClonedAppInstaller {
+        return ClonedAppInstaller(context)
+    }
+
+    /**
+     * Provides the VirtualAppEngine instance
+     */
+    @Singleton
+    @Provides
+    fun provideVirtualAppEngine(
+        @ApplicationContext context: Context,
+        cloneEnvironment: CloneEnvironment,
+        clonedAppInstaller: ClonedAppInstaller
+    ): VirtualAppEngine {
+        return VirtualAppEngine(
+            context = context,
+            cloneEnvironment = cloneEnvironment,
+            clonedAppInstaller = clonedAppInstaller
+        )
     }
 }

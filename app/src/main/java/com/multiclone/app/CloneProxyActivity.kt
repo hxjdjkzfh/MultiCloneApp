@@ -1,210 +1,120 @@
 package com.multiclone.app
 
 import android.content.ComponentName
-import android.content.Context
 import android.content.Intent
+import android.content.ServiceConnection
 import android.os.Bundle
+import android.os.IBinder
 import android.util.Log
+import android.widget.Toast
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Surface
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
 import androidx.lifecycle.lifecycleScope
 import com.multiclone.app.data.repository.CloneRepository
-import com.multiclone.app.domain.virtualization.CloneEnvironment
 import com.multiclone.app.domain.virtualization.CloneManagerService
-import com.multiclone.app.ui.theme.MultiCloneAppTheme
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import java.io.File
-import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
 /**
- * Proxy activity that launches cloned applications
- * This activity is responsible for setting up and redirecting to the cloned app
+ * Proxy activity that handles the launching of cloned apps
+ * This is used as an intermediary to set up the virtualization environment
+ * before launching the actual app UI
  */
 @AndroidEntryPoint
 class CloneProxyActivity : ComponentActivity() {
-
-    companion object {
-        private const val TAG = "CloneProxyActivity"
-        
-        // Intent extras
-        const val EXTRA_CLONE_ID = "clone_id"
-        const val EXTRA_ENVIRONMENT_ID = "environment_id"
-        const val EXTRA_PACKAGE_NAME = "package_name"
-        const val EXTRA_ORIGINAL_INTENT = "original_intent"
-        
-        // Intent action for launching clones
-        const val ACTION_LAUNCH_CLONE = "com.multiclone.app.LAUNCH_CLONE"
-        
-        /**
-         * Creates an Intent to launch a cloned app
-         *
-         * @param context The context
-         * @param cloneId The ID of the clone to launch
-         * @param packageName The package name of the app
-         * @return The intent to launch the cloned app
-         */
-        fun createLaunchIntent(
-            context: Context,
-            cloneId: String,
-            packageName: String
-        ): Intent {
-            return Intent(ACTION_LAUNCH_CLONE).apply {
-                setPackage(context.packageName)
-                putExtra(EXTRA_CLONE_ID, cloneId)
-                putExtra(EXTRA_PACKAGE_NAME, packageName)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-        }
-    }
-
+    private val TAG = "CloneProxyActivity"
+    
     @Inject
     lateinit var cloneRepository: CloneRepository
-
-    @Inject
-    lateinit var cloneEnvironment: CloneEnvironment
     
-    private var isLaunching by mutableStateOf(true)
-    private var launchError by mutableStateOf<String?>(null)
+    private var cloneManagerService: CloneManagerService? = null
+    private var bound = false
+    
+    private val serviceConnection = object : ServiceConnection {
+        override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+            val binder = service as CloneManagerService.LocalBinder
+            cloneManagerService = binder.getService()
+            bound = true
+            
+            // Now that we're connected to the service, proceed with app launch
+            handleAppLaunch()
+        }
 
+        override fun onServiceDisconnected(name: ComponentName?) {
+            cloneManagerService = null
+            bound = false
+        }
+    }
+    
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        Log.d(TAG, "CloneProxyActivity created")
-        
-        // Set the theme for this loading activity
-        setContent {
-            MultiCloneAppTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier = Modifier.fillMaxSize()
-                    ) {
-                        CircularProgressIndicator()
-                    }
-                }
-            }
+        // Bind to the CloneManagerService
+        Intent(this, CloneManagerService::class.java).also { intent ->
+            bindService(intent, serviceConnection, BIND_AUTO_CREATE)
         }
         
-        // Process intent
-        processIntent(intent)
+        // Start the service if it's not already running
+        startService(Intent(this, CloneManagerService::class.java))
     }
     
-    override fun onNewIntent(intent: Intent?) {
-        super.onNewIntent(intent)
-        
-        Log.d(TAG, "CloneProxyActivity received new intent")
-        
-        if (intent != null) {
-            processIntent(intent)
+    override fun onDestroy() {
+        super.onDestroy()
+        if (bound) {
+            unbindService(serviceConnection)
+            bound = false
         }
     }
     
     /**
-     * Process the launch intent
+     * Handle the app launch once we're connected to the service
      */
-    private fun processIntent(intent: Intent) {
-        val action = intent.action
+    private fun handleAppLaunch() {
+        val cloneId = intent.getStringExtra("cloneId")
         
-        if (action == ACTION_LAUNCH_CLONE) {
-            // Start the CloneManagerService if not already running
-            Intent(this, CloneManagerService::class.java).also { serviceIntent ->
-                startForegroundService(serviceIntent)
+        if (cloneId.isNullOrEmpty()) {
+            showError("No clone ID provided")
+            finish()
+            return
+        }
+        
+        lifecycleScope.launch {
+            val cloneInfo = cloneRepository.getCloneById(cloneId)
+            
+            if (cloneInfo == null) {
+                showError("Clone not found")
+                finish()
+                return@launch
             }
             
-            // Extract intent extras
-            val cloneId = intent.getStringExtra(EXTRA_CLONE_ID)
-            val packageName = intent.getStringExtra(EXTRA_PACKAGE_NAME)
+            // Start the clone session
+            val success = cloneManagerService?.startCloneSession(cloneInfo) ?: false
             
-            if (cloneId == null || packageName == null) {
-                Log.e(TAG, "Missing required extras: cloneId=$cloneId, packageName=$packageName")
-                launchError = "Missing required information to launch the app"
-                finishAfterTransition()
-                return
+            if (!success) {
+                showError("Failed to start clone")
+                finish()
+                return@launch
             }
             
-            // Launch in the background
-            lifecycleScope.launch {
-                launchClonedApp(cloneId, packageName)
-            }
-        } else {
-            Log.e(TAG, "Unknown action: $action")
-            launchError = "Invalid action"
-            finishAfterTransition()
+            // Update the last used time
+            cloneRepository.updateLastUsedTime(cloneId)
+            
+            // In a real implementation, we would now launch the actual app UI
+            // For this demonstration, we'll just show a message and finish
+            showMessage("Successfully launched ${cloneInfo.displayName}")
+            Log.d(TAG, "Clone launched: ${cloneInfo.displayName}")
+            
+            // Finish the proxy activity and return to the previous screen
+            finish()
         }
     }
     
-    /**
-     * Launch the cloned app
-     */
-    private suspend fun launchClonedApp(cloneId: String, packageName: String) {
-        try {
-            Log.d(TAG, "Launching cloned app: packageName=$packageName, cloneId=$cloneId")
-            
-            // Get the environment ID for this clone
-            val environmentId = cloneEnvironment.getEnvironmentIdForClone(cloneId)
-            if (environmentId == null) {
-                Log.e(TAG, "No environment found for clone: $cloneId")
-                launchError = "No environment found for this clone"
-                finishAfterTransition()
-                return
-            }
-            
-            // Get the launch intent for the original app
-            val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
-            if (launchIntent == null) {
-                Log.e(TAG, "No launch intent found for package: $packageName")
-                launchError = "No launch intent found for this app"
-                finishAfterTransition()
-                return
-            }
-            
-            // Clone this intent and modify it to launch in our virtual environment
-            val virtualIntent = Intent(launchIntent)
-            
-            // Prepare virtual environment flags
-            virtualIntent.putExtra("multiclone_clone_id", cloneId)
-            virtualIntent.putExtra("multiclone_environment_id", environmentId)
-            virtualIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            
-            // In a real implementation, we would do much more complex proxying and sandbox setup here
-            // For this demo, we'll just log that we would launch the app in a sandbox
-            Log.i(TAG, "Would launch app $packageName in sandbox environment $environmentId for clone $cloneId")
-            
-            // Update the lastUsedTime for this clone
-            cloneRepository.updateCloneLastUsed(cloneId, System.currentTimeMillis())
-            
-            // For demo purposes, we'll simulate a successful launch by briefly showing the loading screen
-            delay(1000)
-            
-            // Finish this activity
-            isLaunching = false
-            finishAfterTransition()
-            
-            // For demo purposes, start the MainActivity
-            val mainIntent = Intent(this, MainActivity::class.java).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            startActivity(mainIntent)
-            
-        } catch (e: Exception) {
-            Log.e(TAG, "Error launching cloned app", e)
-            launchError = "Error launching app: ${e.message}"
-            finishAfterTransition()
-        }
+    private fun showError(message: String) {
+        Toast.makeText(this, "Error: $message", Toast.LENGTH_SHORT).show()
+        Log.e(TAG, message)
+    }
+    
+    private fun showMessage(message: String) {
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
     }
 }

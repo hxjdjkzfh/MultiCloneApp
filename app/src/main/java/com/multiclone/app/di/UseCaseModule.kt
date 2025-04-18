@@ -6,44 +6,70 @@ import com.multiclone.app.domain.usecase.CreateCloneUseCase
 import com.multiclone.app.domain.usecase.CreateShortcutUseCase
 import com.multiclone.app.domain.usecase.GetInstalledAppsUseCase
 import com.multiclone.app.domain.usecase.LaunchCloneUseCase
+import com.multiclone.app.domain.virtualization.VirtualAppEngine
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
-import javax.inject.Singleton
 
+/**
+ * Dagger/Hilt module that provides use case dependencies
+ */
 @Module
 @InstallIn(SingletonComponent::class)
 object UseCaseModule {
+
+    /**
+     * Provides the GetInstalledAppsUseCase instance
+     */
     @Provides
-    @Singleton
     fun provideGetInstalledAppsUseCase(
-        appRepository: AppRepository
+        virtualAppEngine: VirtualAppEngine
     ): GetInstalledAppsUseCase {
-        return GetInstalledAppsUseCase(appRepository)
+        return GetInstalledAppsUseCase(virtualAppEngine)
     }
-    
+
+    /**
+     * Provides the CreateCloneUseCase instance
+     */
     @Provides
-    @Singleton
     fun provideCreateCloneUseCase(
-        cloneRepository: CloneRepository
+        appRepository: AppRepository,
+        cloneRepository: CloneRepository,
+        virtualAppEngine: VirtualAppEngine
     ): CreateCloneUseCase {
-        return CreateCloneUseCase(cloneRepository)
+        return CreateCloneUseCase(
+            appRepository,
+            cloneRepository,
+            virtualAppEngine
+        )
     }
-    
+
+    /**
+     * Provides the CreateShortcutUseCase instance
+     */
     @Provides
-    @Singleton
     fun provideCreateShortcutUseCase(
-        cloneRepository: CloneRepository
+        cloneRepository: CloneRepository,
+        virtualAppEngine: VirtualAppEngine
     ): CreateShortcutUseCase {
-        return CreateShortcutUseCase(cloneRepository)
+        return CreateShortcutUseCase(
+            cloneRepository = cloneRepository,
+            virtualAppEngine = virtualAppEngine
+        )
     }
-    
+
+    /**
+     * Provides the LaunchCloneUseCase instance
+     */
     @Provides
-    @Singleton
     fun provideLaunchCloneUseCase(
-        cloneRepository: CloneRepository
+        cloneRepository: CloneRepository,
+        virtualAppEngine: VirtualAppEngine
     ): LaunchCloneUseCase {
-        return LaunchCloneUseCase(cloneRepository)
+        return LaunchCloneUseCase(
+            cloneRepository = cloneRepository,
+            virtualAppEngine = virtualAppEngine
+        )
     }
 }

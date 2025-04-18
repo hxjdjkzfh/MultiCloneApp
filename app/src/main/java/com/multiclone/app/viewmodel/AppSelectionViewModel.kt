@@ -13,60 +13,86 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
- * ViewModel for the app selection screen
+ * ViewModel for the AppSelectionScreen
  */
 @HiltViewModel
 class AppSelectionViewModel @Inject constructor(
     private val getInstalledAppsUseCase: GetInstalledAppsUseCase
 ) : ViewModel() {
-    
-    // UI state for the app selection screen
+
     private val _uiState = MutableStateFlow(AppSelectionUiState())
     val uiState: StateFlow<AppSelectionUiState> = _uiState.asStateFlow()
-    
-    init {
-        loadInstalledApps()
-    }
-    
+
     /**
-     * Load all installed apps
+     * Loads the list of installed apps that can be cloned
      */
-    private fun loadInstalledApps() {
+    fun loadInstalledApps() {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true) }
+            _uiState.update { it.copy(isLoading = true, error = null) }
             
             try {
-                val installedApps = getInstalledAppsUseCase.execute()
+                val apps = getInstalledAppsUseCase()
                 _uiState.update { 
                     it.copy(
                         isLoading = false,
-                        installedApps = installedApps.sortedBy { app -> app.appName }
+                        apps = apps.sortedBy { app -> app.appName },
+                        error = null
                     )
                 }
             } catch (e: Exception) {
                 _uiState.update { 
                     it.copy(
                         isLoading = false,
-                        error = e.message ?: "Failed to load installed apps"
+                        error = e.message ?: "Unknown error occurred"
                     )
                 }
             }
         }
     }
-    
+
     /**
-     * Refresh the list of installed apps
+     * Filters the list of apps based on a search query
      */
-    fun refreshApps() {
-        loadInstalledApps()
+    fun filterApps(query: String) {
+        viewModelScope.launch {
+            if (query.isBlank()) {
+                loadInstalledApps()
+                return@launch
+            }
+            
+            _uiState.update { it.copy(isLoading = true) }
+            
+            try {
+                val allApps = getInstalledAppsUseCase()
+                val filteredApps = allApps.filter { app ->
+                    app.appName.contains(query, ignoreCase = true) ||
+                    app.packageName.contains(query, ignoreCase = true)
+                }.sortedBy { it.appName }
+                
+                _uiState.update { 
+                    it.copy(
+                        isLoading = false,
+                        apps = filteredApps,
+                        error = null
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.update { 
+                    it.copy(
+                        isLoading = false,
+                        error = e.message ?: "Unknown error occurred"
+                    )
+                }
+            }
+        }
     }
 }
 
 /**
- * UI state for app selection screen
+ * UI state for the AppSelectionScreen
  */
 data class AppSelectionUiState(
     val isLoading: Boolean = false,
-    val installedApps: List<AppInfo> = emptyList(),
+    val apps: List<AppInfo> = emptyList(),
     val error: String? = null
 )

@@ -1,8 +1,8 @@
 package com.multiclone.app.di
 
 import android.content.Context
-import com.multiclone.app.utils.IconUtils
-import com.multiclone.app.utils.PermissionUtils
+import com.multiclone.app.data.repository.AppRepository
+import com.multiclone.app.data.repository.CloneRepository
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -11,21 +11,31 @@ import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 
 /**
- * Hilt module to provide application-level dependencies
+ * Dagger/Hilt module that provides application-level dependencies
  */
 @Module
 @InstallIn(SingletonComponent::class)
 object AppModule {
-    
-    @Provides
+
+    /**
+     * Provides the AppRepository instance
+     */
     @Singleton
-    fun provideIconUtils(@ApplicationContext context: Context): IconUtils {
-        return IconUtils(context)
+    @Provides
+    fun provideAppRepository(
+        @ApplicationContext context: Context
+    ): AppRepository {
+        return AppRepository(context)
     }
-    
-    @Provides
+
+    /**
+     * Provides the CloneRepository instance
+     */
     @Singleton
-    fun providePermissionUtils(@ApplicationContext context: Context): PermissionUtils {
-        return PermissionUtils(context)
+    @Provides
+    fun provideCloneRepository(
+        @ApplicationContext context: Context
+    ): CloneRepository {
+        return CloneRepository(context)
     }
 }

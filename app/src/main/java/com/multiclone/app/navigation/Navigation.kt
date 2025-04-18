@@ -1,12 +1,11 @@
 package com.multiclone.app.navigation
 
-import androidx.compose.animation.AnimatedContentTransitionScope
-import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.multiclone.app.ui.screens.AppSelectionScreen
 import com.multiclone.app.ui.screens.CloneConfigScreen
@@ -14,7 +13,7 @@ import com.multiclone.app.ui.screens.ClonesListScreen
 import com.multiclone.app.ui.screens.HomeScreen
 
 /**
- * Sealed class containing all the routes for the app
+ * Main navigation routes for the app
  */
 sealed class Screen(val route: String) {
     object Home : Screen("home")
@@ -26,75 +25,51 @@ sealed class Screen(val route: String) {
 }
 
 /**
- * App navigation setup using Jetpack Navigation Compose
+ * Main navigation component for the app
  */
 @Composable
-fun NavigationHost(navController: NavHostController) {
+fun AppNavigation(
+    navController: NavHostController = rememberNavController()
+) {
     NavHost(
         navController = navController,
-        startDestination = Screen.Home.route,
-        enterTransition = {
-            slideIntoContainer(
-                towards = AnimatedContentTransitionScope.SlideDirection.Left,
-                animationSpec = tween(300)
-            )
-        },
-        exitTransition = {
-            slideOutOfContainer(
-                towards = AnimatedContentTransitionScope.SlideDirection.Left,
-                animationSpec = tween(300)
-            )
-        },
-        popEnterTransition = {
-            slideIntoContainer(
-                towards = AnimatedContentTransitionScope.SlideDirection.Right,
-                animationSpec = tween(300)
-            )
-        },
-        popExitTransition = {
-            slideOutOfContainer(
-                towards = AnimatedContentTransitionScope.SlideDirection.Right,
-                animationSpec = tween(300)
-            )
-        }
+        startDestination = Screen.Home.route
     ) {
-        // Home screen - Main entry point
-        composable(route = Screen.Home.route) {
+        composable(Screen.Home.route) {
             HomeScreen(
-                navigateToClonesList = {
+                onNavigateToClonesList = {
                     navController.navigate(Screen.ClonesList.route)
                 },
-                navigateToCreateClone = {
+                onNavigateToAppSelection = {
                     navController.navigate(Screen.AppSelection.route)
                 }
             )
         }
         
-        // Clones list screen - Shows all cloned apps
-        composable(route = Screen.ClonesList.route) {
+        composable(Screen.ClonesList.route) {
             ClonesListScreen(
-                onBackPressed = {
-                    navController.popBackStack()
+                onNavigateUp = {
+                    navController.navigateUp()
                 },
-                navigateToCreateClone = {
+                onNavigateToAppSelection = {
                     navController.navigate(Screen.AppSelection.route)
                 }
             )
         }
         
-        // App selection screen - Choose which app to clone
-        composable(route = Screen.AppSelection.route) {
+        composable(Screen.AppSelection.route) {
             AppSelectionScreen(
-                onBackPressed = {
-                    navController.popBackStack()
+                onNavigateUp = {
+                    navController.navigateUp()
                 },
                 onAppSelected = { packageName ->
-                    navController.navigate(Screen.CloneConfig.createRoute(packageName))
+                    navController.navigate(
+                        Screen.CloneConfig.createRoute(packageName)
+                    )
                 }
             )
         }
         
-        // Clone configuration screen - Set up clone settings
         composable(
             route = Screen.CloneConfig.route,
             arguments = listOf(
@@ -107,13 +82,16 @@ fun NavigationHost(navController: NavHostController) {
             
             CloneConfigScreen(
                 packageName = packageName,
-                onBackPressed = {
-                    navController.popBackStack()
+                onNavigateUp = {
+                    navController.navigateUp()
                 },
                 onCloneCreated = {
-                    // Navigate to clones list and clear the back stack
-                    navController.navigate(Screen.ClonesList.route) {
-                        popUpTo(Screen.Home.route)
+                    // Navigate back to home screen after clone creation
+                    navController.navigate(Screen.Home.route) {
+                        // Clear the back stack so the user can't navigate back to the config screen
+                        popUpTo(Screen.Home.route) {
+                            inclusive = true
+                        }
                     }
                 }
             )
