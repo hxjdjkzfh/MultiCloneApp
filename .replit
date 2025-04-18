@@ -1,0 +1,52 @@
+modules = ["kotlin"]
+
+[nix]
+channel = "stable-24_05"
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Android App Build and Run"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "build_and_run_android"
+
+[[workflows.workflow]]
+name = "Android App Build and Run"
+author = "agent"
+
+[workflows.workflow.metadata]
+agentRequireRestartOnSave = false
+
+[[workflows.workflow.tasks]]
+task = "packager.installForAll"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "./gradlew :app:installDebug"
+waitForPort = 5000
+
+[[workflows.workflow]]
+name = "build_and_run_android"
+author = "agent"
+
+[workflows.workflow.metadata]
+agentRequireRestartOnSave = false
+
+[[workflows.workflow.tasks]]
+task = "packager.installForAll"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "./gradlew :app:assembleDebug && ./gradlew :app:installDebug"
+
+[deployment]
+run = ["sh", "-c", "./gradlew :app:installDebug"]
