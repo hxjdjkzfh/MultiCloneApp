@@ -1,6 +1,7 @@
 package com.multiclone.app.di
 
 import android.content.Context
+import com.multiclone.app.core.virtualization.VirtualAppEngine
 import com.multiclone.app.data.repository.AppRepository
 import com.multiclone.app.data.repository.CloneRepository
 import dagger.Module
@@ -18,14 +19,25 @@ import javax.inject.Singleton
 object AppModule {
 
     /**
+     * Provides the VirtualAppEngine instance
+     */
+    @Singleton
+    @Provides
+    fun provideVirtualAppEngine(
+        @ApplicationContext context: Context
+    ): VirtualAppEngine {
+        return VirtualAppEngine(context)
+    }
+
+    /**
      * Provides the AppRepository instance
      */
     @Singleton
     @Provides
     fun provideAppRepository(
-        @ApplicationContext context: Context
+        virtualAppEngine: VirtualAppEngine
     ): AppRepository {
-        return AppRepository(context)
+        return AppRepository(virtualAppEngine)
     }
 
     /**
@@ -34,8 +46,9 @@ object AppModule {
     @Singleton
     @Provides
     fun provideCloneRepository(
-        @ApplicationContext context: Context
+        @ApplicationContext context: Context,
+        virtualAppEngine: VirtualAppEngine
     ): CloneRepository {
-        return CloneRepository(context)
+        return CloneRepository(context, virtualAppEngine)
     }
 }

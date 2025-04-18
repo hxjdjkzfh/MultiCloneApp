@@ -3,7 +3,7 @@ package com.multiclone.app
 import android.app.Application
 import android.content.Intent
 import com.multiclone.app.core.virtualization.CloneManagerService
-import com.multiclone.app.domain.service.VirtualAppService
+import com.multiclone.app.core.service.VirtualAppService
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
 

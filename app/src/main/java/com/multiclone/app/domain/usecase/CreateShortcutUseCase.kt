@@ -1,7 +1,7 @@
 package com.multiclone.app.domain.usecase
 
 import com.multiclone.app.data.repository.CloneRepository
-import com.multiclone.app.domain.virtualization.VirtualAppEngine
+import com.multiclone.app.core.virtualization.VirtualAppEngine
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import javax.inject.Inject

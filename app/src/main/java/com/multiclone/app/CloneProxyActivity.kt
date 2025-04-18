@@ -10,7 +10,7 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.lifecycle.lifecycleScope
 import com.multiclone.app.data.repository.CloneRepository
-import com.multiclone.app.domain.virtualization.CloneManagerService
+import com.multiclone.app.core.virtualization.CloneManagerService
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import javax.inject.Inject

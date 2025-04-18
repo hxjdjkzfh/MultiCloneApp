@@ -1,9 +1,9 @@
 package com.multiclone.app.di
 
 import android.content.Context
-import com.multiclone.app.domain.virtualization.CloneEnvironment
-import com.multiclone.app.domain.virtualization.ClonedAppInstaller
-import com.multiclone.app.domain.virtualization.VirtualAppEngine
+import com.multiclone.app.core.virtualization.CloneEnvironment
+import com.multiclone.app.core.virtualization.ClonedAppInstaller
+import com.multiclone.app.core.virtualization.VirtualAppEngine
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn

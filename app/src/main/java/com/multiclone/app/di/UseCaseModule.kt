@@ -6,7 +6,7 @@ import com.multiclone.app.domain.usecase.CreateCloneUseCase
 import com.multiclone.app.domain.usecase.CreateShortcutUseCase
 import com.multiclone.app.domain.usecase.GetInstalledAppsUseCase
 import com.multiclone.app.domain.usecase.LaunchCloneUseCase
-import com.multiclone.app.domain.virtualization.VirtualAppEngine
+import com.multiclone.app.core.virtualization.VirtualAppEngine
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
