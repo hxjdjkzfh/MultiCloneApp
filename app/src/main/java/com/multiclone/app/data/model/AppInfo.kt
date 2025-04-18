@@ -1,15 +1,18 @@
 package com.multiclone.app.data.model
 
 import android.graphics.drawable.Drawable
+import android.os.Parcelable
+import kotlinx.parcelize.Parcelize
+import kotlinx.parcelize.RawValue
 
 /**
- * Data class representing information about an installed application
+ * Data model representing an installed application
  */
+@Parcelize
 data class AppInfo(
     val packageName: String,
     val appName: String,
     val versionName: String?,
-    val versionCode: Long,
-    val icon: Drawable,
+    val icon: @RawValue Drawable,
     val isSystemApp: Boolean
-)
+) : Parcelable

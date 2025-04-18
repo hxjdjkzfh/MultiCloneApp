@@ -8,7 +8,6 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -19,45 +18,52 @@ import javax.inject.Inject
 class AppSelectionViewModel @Inject constructor(
     private val getInstalledAppsUseCase: GetInstalledAppsUseCase
 ) : ViewModel() {
-    
-    private val _appsList = MutableStateFlow<List<AppInfo>>(emptyList())
-    val appsList: StateFlow<List<AppInfo>> = _appsList.asStateFlow()
-    
-    private val _filteredApps = MutableStateFlow<List<AppInfo>>(emptyList())
-    val filteredApps: StateFlow<List<AppInfo>> = _filteredApps.asStateFlow()
+
+    private val _apps = MutableStateFlow<List<AppInfo>>(emptyList())
+    val apps: StateFlow<List<AppInfo>> = _apps.asStateFlow()
     
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
     
-    /**
-     * Load all installed apps
-     */
-    fun loadInstalledApps() {
+    private val _searchQuery = MutableStateFlow("")
+    val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
+
+    init {
+        loadApps()
+    }
+    
+    fun loadApps() {
         viewModelScope.launch {
             _isLoading.value = true
             
-            getInstalledAppsUseCase(includeSystemApps = false).collectLatest { apps ->
-                _appsList.value = apps
-                _filteredApps.value = apps
+            try {
+                _apps.value = getInstalledAppsUseCase()
+            } catch (e: Exception) {
+                // Handle error - in a real app, we would use an error state
+                _apps.value = emptyList()
+            } finally {
                 _isLoading.value = false
             }
         }
     }
     
-    /**
-     * Filter apps based on search query
-     */
-    fun filterApps(query: String) {
-        if (query.isBlank()) {
-            _filteredApps.value = _appsList.value
-            return
-        }
+    fun searchApps(query: String) {
+        _searchQuery.value = query
         
         viewModelScope.launch {
-            val lowercaseQuery = query.lowercase()
-            _filteredApps.value = _appsList.value.filter { app ->
-                app.appName.lowercase().contains(lowercaseQuery) ||
-                app.packageName.lowercase().contains(lowercaseQuery)
+            _isLoading.value = true
+            
+            try {
+                _apps.value = if (query.isBlank()) {
+                    getInstalledAppsUseCase()
+                } else {
+                    getInstalledAppsUseCase.search(query)
+                }
+            } catch (e: Exception) {
+                // Handle error
+                _apps.value = emptyList()
+            } finally {
+                _isLoading.value = false
             }
         }
     }

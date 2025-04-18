@@ -1,7 +1,6 @@
 package com.multiclone.app.utils
 
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
@@ -9,14 +8,12 @@ import java.io.File
 import java.io.FileOutputStream
 
 /**
- * Utility class for handling app icons
+ * Utility class for icon-related operations
  */
 object IconUtils {
     
     /**
-     * Convert a drawable to a bitmap
-     * @param drawable the drawable to convert
-     * @return the resulting bitmap
+     * Convert a Drawable to a Bitmap
      */
     fun drawableToBitmap(drawable: Drawable): Bitmap {
         if (drawable is BitmapDrawable) {
@@ -43,9 +40,6 @@ object IconUtils {
     
     /**
      * Save a bitmap to a file
-     * @param bitmap the bitmap to save
-     * @param file the file to save to
-     * @return true if successful
      */
     fun saveBitmapToFile(bitmap: Bitmap, file: File): Boolean {
         return try {
@@ -61,14 +55,16 @@ object IconUtils {
     
     /**
      * Load a bitmap from a file
-     * @param file the file to load from
-     * @return the loaded bitmap or null if failed
      */
     fun loadBitmapFromFile(file: File): Bitmap? {
-        return try {
-            BitmapFactory.decodeFile(file.absolutePath)
-        } catch (e: Exception) {
-            e.printStackTrace()
+        return if (file.exists()) {
+            try {
+                android.graphics.BitmapFactory.decodeFile(file.absolutePath)
+            } catch (e: Exception) {
+                e.printStackTrace()
+                null
+            }
+        } else {
             null
         }
     }

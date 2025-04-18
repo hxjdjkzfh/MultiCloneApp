@@ -1,30 +1,29 @@
 package com.multiclone.app.domain.usecase
 
 import com.multiclone.app.data.repository.CloneRepository
-import com.multiclone.app.domain.service.VirtualAppService
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 /**
- * Use case for deleting a cloned app
+ * Use case for deleting a cloned application
  */
 class DeleteCloneUseCase @Inject constructor(
-    private val cloneRepository: CloneRepository,
-    private val virtualAppService: VirtualAppService
+    private val cloneRepository: CloneRepository
 ) {
     /**
-     * Delete a clone with the given ID
-     * @param cloneId the ID of the clone to delete
+     * Delete a cloned app by ID
      */
-    suspend operator fun invoke(cloneId: String) {
-        // Get clone info first
-        val clone = cloneRepository.getCloneById(cloneId)
-        
-        // Delete the clone from repository
-        cloneRepository.deleteClone(cloneId)
-        
-        // Cleanup virtual environment
-        clone?.virtualEnvironmentId?.let { virtualEnvId ->
-            virtualAppService.deleteVirtualEnvironment(virtualEnvId)
+    suspend operator fun invoke(cloneId: String): Result<Boolean> = withContext(Dispatchers.IO) {
+        try {
+            val result = cloneRepository.deleteClone(cloneId)
+            if (result) {
+                Result.success(true)
+            } else {
+                Result.failure(Exception("Failed to delete clone"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
         }
     }
 }

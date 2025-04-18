@@ -1,30 +1,34 @@
 [
     {
-        "merged": "com.multiclone.app-merged_res-72:/xml_data_extraction_rules.xml.flat",
-        "source": "com.multiclone.app-main-74:/xml/data_extraction_rules.xml"
+        "merged": "/home/runner/.gradle/daemon/8.2/com.multiclone.app-merged_res-72:/xml_data_extraction_rules.xml.flat",
+        "source": "/home/runner/.gradle/daemon/8.2/com.multiclone.app-main-74:/xml/data_extraction_rules.xml"
     },
     {
-        "merged": "com.multiclone.app-merged_res-72:/drawable_ic_launcher_foreground.xml.flat",
-        "source": "com.multiclone.app-main-74:/drawable/ic_launcher_foreground.xml"
+        "merged": "/home/runner/.gradle/daemon/8.2/com.multiclone.app-merged_res-72:/drawable_ic_launcher_background.xml.flat",
+        "source": "/home/runner/.gradle/daemon/8.2/com.multiclone.app-main-74:/drawable/ic_launcher_background.xml"
     },
     {
-        "merged": "com.multiclone.app-merged_res-72:/mipmap-anydpi-v26_ic_launcher_round.xml.flat",
-        "source": "com.multiclone.app-main-74:/mipmap-anydpi-v26/ic_launcher_round.xml"
+        "merged": "/home/runner/.gradle/daemon/8.2/com.multiclone.app-merged_res-72:/drawable_ic_launcher_foreground.xml.flat",
+        "source": "/home/runner/.gradle/daemon/8.2/com.multiclone.app-main-74:/drawable/ic_launcher_foreground.xml"
     },
     {
-        "merged": "com.multiclone.app-merged_res-72:/mipmap-anydpi-v26_ic_launcher.xml.flat",
-        "source": "com.multiclone.app-main-74:/mipmap-anydpi-v26/ic_launcher.xml"
+        "merged": "/home/runner/.gradle/daemon/8.2/com.multiclone.app-merged_res-72:/mipmap-anydpi-v26_ic_launcher_round.xml.flat",
+        "source": "/home/runner/.gradle/daemon/8.2/com.multiclone.app-main-74:/mipmap-anydpi-v26/ic_launcher_round.xml"
     },
     {
-        "merged": "com.multiclone.app-merged_res-72:/xml_backup_rules.xml.flat",
-        "source": "com.multiclone.app-main-74:/xml/backup_rules.xml"
+        "merged": "/home/runner/.gradle/daemon/8.2/com.multiclone.app-merged_res-72:/mipmap-anydpi-v26_ic_launcher.xml.flat",
+        "source": "/home/runner/.gradle/daemon/8.2/com.multiclone.app-main-74:/mipmap-anydpi-v26/ic_launcher.xml"
     },
     {
-        "merged": "com.multiclone.app-merged_res-72:/drawable_ic_launcher_background.xml.flat",
-        "source": "com.multiclone.app-main-74:/drawable/ic_launcher_background.xml"
+        "merged": "/home/runner/.gradle/daemon/8.2/com.multiclone.app-merged_res-72:/xml_file_paths.xml.flat",
+        "source": "/home/runner/.gradle/daemon/8.2/com.multiclone.app-main-74:/xml/file_paths.xml"
     },
     {
         "merged": "com.multiclone.app-merged_res-72:/xml_file_paths.xml.flat",
         "source": "com.multiclone.app-main-74:/xml/file_paths.xml"
+    },
+    {
+        "merged": "/home/runner/.gradle/daemon/8.2/com.multiclone.app-merged_res-72:/xml_backup_rules.xml.flat",
+        "source": "/home/runner/.gradle/daemon/8.2/com.multiclone.app-main-74:/xml/backup_rules.xml"
     }
 ]

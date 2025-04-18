@@ -1,6 +1,7 @@
 package com.multiclone.app.data.repository;
 
 import android.content.Context;
+import com.multiclone.app.core.virtualization.VirtualAppEngine;
 import dagger.internal.DaggerGenerated;
 import dagger.internal.Factory;
 import dagger.internal.QualifierMetadata;
@@ -9,7 +10,7 @@ import javax.annotation.processing.Generated;
 import javax.inject.Provider;
 
 @ScopeMetadata("javax.inject.Singleton")
-@QualifierMetadata
+@QualifierMetadata("dagger.hilt.android.qualifiers.ApplicationContext")
 @DaggerGenerated
 @Generated(
     value = "dagger.internal.codegen.ComponentProcessor",
@@ -22,20 +23,25 @@ import javax.inject.Provider;
 public final class CloneRepository_Factory implements Factory<CloneRepository> {
   private final Provider<Context> contextProvider;
 
-  public CloneRepository_Factory(Provider<Context> contextProvider) {
+  private final Provider<VirtualAppEngine> virtualAppEngineProvider;
+
+  public CloneRepository_Factory(Provider<Context> contextProvider,
+      Provider<VirtualAppEngine> virtualAppEngineProvider) {
     this.contextProvider = contextProvider;
+    this.virtualAppEngineProvider = virtualAppEngineProvider;
   }
 
   @Override
   public CloneRepository get() {
-    return newInstance(contextProvider.get());
+    return newInstance(contextProvider.get(), virtualAppEngineProvider.get());
   }
 
-  public static CloneRepository_Factory create(Provider<Context> contextProvider) {
-    return new CloneRepository_Factory(contextProvider);
+  public static CloneRepository_Factory create(Provider<Context> contextProvider,
+      Provider<VirtualAppEngine> virtualAppEngineProvider) {
+    return new CloneRepository_Factory(contextProvider, virtualAppEngineProvider);
   }
 
-  public static CloneRepository newInstance(Context context) {
-    return new CloneRepository(context);
+  public static CloneRepository newInstance(Context context, VirtualAppEngine virtualAppEngine) {
+    return new CloneRepository(context, virtualAppEngine);
   }
 }

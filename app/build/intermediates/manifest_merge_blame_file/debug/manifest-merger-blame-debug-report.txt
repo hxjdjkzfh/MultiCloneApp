@@ -122,8 +122,8 @@
 66        <!-- Proxy activity for launching cloned apps -->
 67        <activity
 67-->/home/runner/workspace/app/src/main/AndroidManifest.xml:53:9-70:20
-68            android:name="com.multiclone.app.CloneProxyActivity"
-68-->/home/runner/workspace/app/src/main/AndroidManifest.xml:54:13-47
+68            android:name="com.multiclone.app.core.virtualization.CloneProxyActivity"
+68-->/home/runner/workspace/app/src/main/AndroidManifest.xml:54:13-67
 69            android:exported="true"
 69-->/home/runner/workspace/app/src/main/AndroidManifest.xml:55:13-36
 70            android:launchMode="singleTask"
@@ -182,8 +182,8 @@
 100        <!-- Background service for managing clones -->
 101        <service
 101-->/home/runner/workspace/app/src/main/AndroidManifest.xml:84:9-86:40
-102            android:name="com.multiclone.app.domain.virtualization.CloneManagerService"
-102-->/home/runner/workspace/app/src/main/AndroidManifest.xml:85:13-70
+102            android:name="com.multiclone.app.core.virtualization.CloneManagerService"
+102-->/home/runner/workspace/app/src/main/AndroidManifest.xml:85:13-68
 103            android:exported="false" />
 103-->/home/runner/workspace/app/src/main/AndroidManifest.xml:86:13-37
 104

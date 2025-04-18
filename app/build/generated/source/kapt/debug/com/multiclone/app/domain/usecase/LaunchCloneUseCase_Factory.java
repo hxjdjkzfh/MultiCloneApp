@@ -1,7 +1,6 @@
 package com.multiclone.app.domain.usecase;
 
 import com.multiclone.app.data.repository.CloneRepository;
-import com.multiclone.app.domain.virtualization.VirtualAppEngine;
 import dagger.internal.DaggerGenerated;
 import dagger.internal.Factory;
 import dagger.internal.QualifierMetadata;
@@ -23,26 +22,21 @@ import javax.inject.Provider;
 public final class LaunchCloneUseCase_Factory implements Factory<LaunchCloneUseCase> {
   private final Provider<CloneRepository> cloneRepositoryProvider;
 
-  private final Provider<VirtualAppEngine> virtualAppEngineProvider;
-
-  public LaunchCloneUseCase_Factory(Provider<CloneRepository> cloneRepositoryProvider,
-      Provider<VirtualAppEngine> virtualAppEngineProvider) {
+  public LaunchCloneUseCase_Factory(Provider<CloneRepository> cloneRepositoryProvider) {
     this.cloneRepositoryProvider = cloneRepositoryProvider;
-    this.virtualAppEngineProvider = virtualAppEngineProvider;
   }
 
   @Override
   public LaunchCloneUseCase get() {
-    return newInstance(cloneRepositoryProvider.get(), virtualAppEngineProvider.get());
+    return newInstance(cloneRepositoryProvider.get());
   }
 
-  public static LaunchCloneUseCase_Factory create(Provider<CloneRepository> cloneRepositoryProvider,
-      Provider<VirtualAppEngine> virtualAppEngineProvider) {
-    return new LaunchCloneUseCase_Factory(cloneRepositoryProvider, virtualAppEngineProvider);
+  public static LaunchCloneUseCase_Factory create(
+      Provider<CloneRepository> cloneRepositoryProvider) {
+    return new LaunchCloneUseCase_Factory(cloneRepositoryProvider);
   }
 
-  public static LaunchCloneUseCase newInstance(CloneRepository cloneRepository,
-      VirtualAppEngine virtualAppEngine) {
-    return new LaunchCloneUseCase(cloneRepository, virtualAppEngine);
+  public static LaunchCloneUseCase newInstance(CloneRepository cloneRepository) {
+    return new LaunchCloneUseCase(cloneRepository);
   }
 }

@@ -65,7 +65,7 @@
 
         <!-- Proxy activity for launching cloned apps -->
         <activity
-            android:name="com.multiclone.app.CloneProxyActivity"
+            android:name="com.multiclone.app.core.virtualization.CloneProxyActivity"
             android:exported="true"
             android:launchMode="singleTask"
             android:theme="@style/Theme.MultiCloneApp" >
@@ -99,7 +99,7 @@
 
         <!-- Background service for managing clones -->
         <service
-            android:name="com.multiclone.app.domain.virtualization.CloneManagerService"
+            android:name="com.multiclone.app.core.virtualization.CloneManagerService"
             android:exported="false" />
 
         <provider

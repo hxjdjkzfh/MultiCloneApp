@@ -10,12 +10,11 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
- * ViewModel for the clones list screens
+ * ViewModel for the clones list screen
  */
 @HiltViewModel
 class ClonesListViewModel @Inject constructor(
@@ -23,67 +22,63 @@ class ClonesListViewModel @Inject constructor(
     private val launchCloneUseCase: LaunchCloneUseCase,
     private val deleteCloneUseCase: DeleteCloneUseCase
 ) : ViewModel() {
-    
-    private val _allClones = MutableStateFlow<List<CloneInfo>>(emptyList())
-    val allClones: StateFlow<List<CloneInfo>> = _allClones.asStateFlow()
-    
-    private val _recentClones = MutableStateFlow<List<CloneInfo>>(emptyList())
-    val recentClones: StateFlow<List<CloneInfo>> = _recentClones.asStateFlow()
+
+    private val _clones = MutableStateFlow<List<CloneInfo>>(emptyList())
+    val clones: StateFlow<List<CloneInfo>> = _clones.asStateFlow()
     
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
     
-    /**
-     * Load all clones
-     */
-    fun loadAllClones() {
+    private val _errorMessage = MutableStateFlow<String?>(null)
+    val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
+
+    init {
+        loadClones()
+    }
+    
+    fun loadClones() {
         viewModelScope.launch {
             _isLoading.value = true
+            _errorMessage.value = null
             
-            getClonesUseCase().collectLatest { clones ->
-                _allClones.value = clones
+            try {
+                _clones.value = getClonesUseCase()
+            } catch (e: Exception) {
+                _errorMessage.value = "Failed to load clones: ${e.message}"
+                _clones.value = emptyList()
+            } finally {
                 _isLoading.value = false
             }
         }
     }
     
-    /**
-     * Load recent clones (limited by count)
-     */
-    fun loadRecentClones(count: Int) {
-        viewModelScope.launch {
-            _isLoading.value = true
-            
-            getClonesUseCase().collectLatest { clones ->
-                _recentClones.value = clones
-                    .sortedByDescending { it.lastUsedTimestamp }
-                    .take(count)
-                _isLoading.value = false
-            }
-        }
-    }
-    
-    /**
-     * Launch a clone by its ID
-     */
     fun launchClone(cloneId: String) {
-        viewModelScope.launch {
-            launchCloneUseCase(cloneId)
-        }
+        launchCloneUseCase(cloneId)
+        loadClones() // Refresh the list to update last used timestamp
     }
     
-    /**
-     * Delete a clone by its ID
-     */
     fun deleteClone(cloneId: String) {
         viewModelScope.launch {
             _isLoading.value = true
+            _errorMessage.value = null
             
-            deleteCloneUseCase(cloneId)
-            
-            // Refresh lists after deletion
-            loadAllClones()
-            loadRecentClones(5)
+            try {
+                deleteCloneUseCase(cloneId)
+                    .onSuccess {
+                        loadClones() // Refresh the list
+                    }
+                    .onFailure { error ->
+                        _errorMessage.value = "Failed to delete clone: ${error.message}"
+                    }
+            } catch (e: Exception) {
+                _errorMessage.value = "Failed to delete clone: ${e.message}"
+            } finally {
+                _isLoading.value = false
+            }
         }
+    }
+    
+    fun clearError() {
+        _errorMessage.value = null
     }
 }

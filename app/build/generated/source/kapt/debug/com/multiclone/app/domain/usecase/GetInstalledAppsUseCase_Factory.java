@@ -1,6 +1,6 @@
 package com.multiclone.app.domain.usecase;
 
-import com.multiclone.app.domain.virtualization.VirtualAppEngine;
+import com.multiclone.app.data.repository.AppRepository;
 import dagger.internal.DaggerGenerated;
 import dagger.internal.Factory;
 import dagger.internal.QualifierMetadata;
@@ -20,23 +20,23 @@ import javax.inject.Provider;
     "rawtypes"
 })
 public final class GetInstalledAppsUseCase_Factory implements Factory<GetInstalledAppsUseCase> {
-  private final Provider<VirtualAppEngine> virtualAppEngineProvider;
+  private final Provider<AppRepository> appRepositoryProvider;
 
-  public GetInstalledAppsUseCase_Factory(Provider<VirtualAppEngine> virtualAppEngineProvider) {
-    this.virtualAppEngineProvider = virtualAppEngineProvider;
+  public GetInstalledAppsUseCase_Factory(Provider<AppRepository> appRepositoryProvider) {
+    this.appRepositoryProvider = appRepositoryProvider;
   }
 
   @Override
   public GetInstalledAppsUseCase get() {
-    return newInstance(virtualAppEngineProvider.get());
+    return newInstance(appRepositoryProvider.get());
   }
 
   public static GetInstalledAppsUseCase_Factory create(
-      Provider<VirtualAppEngine> virtualAppEngineProvider) {
-    return new GetInstalledAppsUseCase_Factory(virtualAppEngineProvider);
+      Provider<AppRepository> appRepositoryProvider) {
+    return new GetInstalledAppsUseCase_Factory(appRepositoryProvider);
   }
 
-  public static GetInstalledAppsUseCase newInstance(VirtualAppEngine virtualAppEngine) {
-    return new GetInstalledAppsUseCase(virtualAppEngine);
+  public static GetInstalledAppsUseCase newInstance(AppRepository appRepository) {
+    return new GetInstalledAppsUseCase(appRepository);
   }
 }

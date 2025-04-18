@@ -1,6 +1,6 @@
 package com.multiclone.app.data.repository;
 
-import android.content.Context;
+import com.multiclone.app.core.virtualization.VirtualAppEngine;
 import dagger.internal.DaggerGenerated;
 import dagger.internal.Factory;
 import dagger.internal.QualifierMetadata;
@@ -20,22 +20,22 @@ import javax.inject.Provider;
     "rawtypes"
 })
 public final class AppRepository_Factory implements Factory<AppRepository> {
-  private final Provider<Context> contextProvider;
+  private final Provider<VirtualAppEngine> virtualAppEngineProvider;
 
-  public AppRepository_Factory(Provider<Context> contextProvider) {
-    this.contextProvider = contextProvider;
+  public AppRepository_Factory(Provider<VirtualAppEngine> virtualAppEngineProvider) {
+    this.virtualAppEngineProvider = virtualAppEngineProvider;
   }
 
   @Override
   public AppRepository get() {
-    return newInstance(contextProvider.get());
+    return newInstance(virtualAppEngineProvider.get());
   }
 
-  public static AppRepository_Factory create(Provider<Context> contextProvider) {
-    return new AppRepository_Factory(contextProvider);
+  public static AppRepository_Factory create(Provider<VirtualAppEngine> virtualAppEngineProvider) {
+    return new AppRepository_Factory(virtualAppEngineProvider);
   }
 
-  public static AppRepository newInstance(Context context) {
-    return new AppRepository(context);
+  public static AppRepository newInstance(VirtualAppEngine virtualAppEngine) {
+    return new AppRepository(virtualAppEngine);
   }
 }

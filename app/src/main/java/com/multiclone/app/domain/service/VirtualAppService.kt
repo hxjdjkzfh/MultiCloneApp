@@ -1,70 +1,77 @@
 package com.multiclone.app.domain.service
 
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.ServiceConnection
+import android.os.IBinder
 import com.multiclone.app.core.virtualization.CloneManagerService
-import com.multiclone.app.core.virtualization.CloneProxyActivity
-import com.multiclone.app.core.virtualization.VirtualAppEngine
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Service for managing virtual app environments and operations
+ * Service interface for connecting to CloneManagerService
+ * This provides a way for the application to communicate with the background service
  */
 @Singleton
 class VirtualAppService @Inject constructor(
-    @ApplicationContext private val context: Context,
-    private val virtualAppEngine: VirtualAppEngine
+    @ApplicationContext private val context: Context
 ) {
-    /**
-     * Create a new virtual environment for an app
-     * @param packageName the package name of the app to virtualize
-     * @return the ID of the created virtual environment
-     */
-    suspend fun createVirtualEnvironment(packageName: String): String {
-        // Generate a unique ID for this virtual environment
-        val virtualEnvId = "ve_${System.currentTimeMillis()}_${packageName.hashCode()}"
-        
-        // Initialize the virtual environment
-        virtualAppEngine.setupVirtualEnvironment(virtualEnvId, packageName)
-        
-        // Start the background service to manage this clone if needed
-        ensureServiceRunning()
-        
-        return virtualEnvId
-    }
+    private var cloneManagerService: CloneManagerService? = null
+    private var isBound = false
     
-    /**
-     * Launch an app in a virtual environment
-     * @param packageName the package name of the app to launch
-     * @param virtualEnvId the ID of the virtual environment
-     */
-    fun launchApp(packageName: String, virtualEnvId: String) {
-        // Create an intent to launch the proxy activity
-        val intent = Intent(context, CloneProxyActivity::class.java).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            putExtra(CloneProxyActivity.EXTRA_PACKAGE_NAME, packageName)
-            putExtra(CloneProxyActivity.EXTRA_VIRTUAL_ENV_ID, virtualEnvId)
+    private val serviceConnection = object : ServiceConnection {
+        override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+            val binder = service as CloneManagerService.LocalBinder
+            cloneManagerService = binder.getService()
+            isBound = true
         }
         
-        // Launch the activity
-        context.startActivity(intent)
+        override fun onServiceDisconnected(name: ComponentName?) {
+            cloneManagerService = null
+            isBound = false
+        }
     }
     
     /**
-     * Delete a virtual environment
-     * @param virtualEnvId the ID of the virtual environment to delete
+     * Connect to the service
      */
-    suspend fun deleteVirtualEnvironment(virtualEnvId: String) {
-        virtualAppEngine.cleanupVirtualEnvironment(virtualEnvId)
+    fun connect() {
+        if (!isBound) {
+            val intent = Intent(context, CloneManagerService::class.java)
+            context.bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
+        }
     }
     
     /**
-     * Ensure the clone manager service is running
+     * Disconnect from the service
      */
-    private fun ensureServiceRunning() {
-        val serviceIntent = Intent(context, CloneManagerService::class.java)
-        context.startService(serviceIntent)
+    fun disconnect() {
+        if (isBound) {
+            context.unbindService(serviceConnection)
+            isBound = false
+        }
+    }
+    
+    /**
+     * Check if the service is connected
+     */
+    fun isConnected(): Boolean {
+        return isBound && cloneManagerService != null
+    }
+    
+    /**
+     * Get the environment for a specific clone
+     */
+    fun getEnvironment(packageName: String, cloneId: String, displayName: String) {
+        cloneManagerService?.getEnvironment(packageName, cloneId, displayName)
+    }
+    
+    /**
+     * Release an environment for a specific clone
+     */
+    fun releaseEnvironment(cloneId: String) {
+        cloneManagerService?.releaseEnvironment(cloneId)
     }
 }

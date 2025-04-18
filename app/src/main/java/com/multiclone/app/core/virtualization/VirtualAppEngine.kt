@@ -1,156 +1,151 @@
 package com.multiclone.app.core.virtualization
 
 import android.content.Context
+import android.content.Intent
+import android.content.pm.ApplicationInfo
+import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
-import android.util.Log
-import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import android.graphics.Bitmap
+import android.graphics.drawable.Drawable
+import android.net.Uri
+import android.os.Build
+import androidx.core.content.FileProvider
+import com.multiclone.app.data.model.AppInfo
+import com.multiclone.app.data.model.CloneInfo
+import com.multiclone.app.utils.IconUtils
 import java.io.File
+import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Core engine for app virtualization and environment creation
+ * Core engine for app virtualization functionality
+ * Handles creating and managing virtual environments for cloned apps
  */
 @Singleton
 class VirtualAppEngine @Inject constructor(
-    @ApplicationContext private val context: Context
+    private val context: Context
 ) {
     companion object {
-        private const val TAG = "VirtualAppEngine"
-        private const val VIRTUAL_ENV_ROOT_DIR = "virtual_environments"
+        private const val CLONE_PREFIX = "com.multiclone.app.clone_"
+        private const val VIRTUAL_ENV_DIR = "virtual_environments"
     }
-    
-    private val virtualEnvRootDir = File(context.filesDir, VIRTUAL_ENV_ROOT_DIR)
-    
-    init {
-        // Ensure directory exists
-        virtualEnvRootDir.mkdirs()
-    }
-    
+
     /**
-     * Set up a virtual environment for an app
-     * @param envId unique ID for the environment
-     * @param packageName package name of the original app
+     * Get a list of installed apps that can be cloned
      */
-    suspend fun setupVirtualEnvironment(envId: String, packageName: String) {
-        withContext(Dispatchers.IO) {
-            Log.d(TAG, "Setting up virtual environment for $packageName with ID $envId")
-            
-            // Create environment directory
-            val envDir = getEnvDirectory(envId)
-            envDir.mkdirs()
-            
-            // Create data and cache directories for the app
-            File(envDir, "data").mkdirs()
-            File(envDir, "cache").mkdirs()
-            
-            try {
-                // Get app info for further setup
-                val packageInfo = context.packageManager.getPackageInfo(packageName, 0)
-                val appInfo = context.packageManager.getApplicationInfo(packageName, 0)
-                
-                // Create metadata file with app info
-                val metadataFile = File(envDir, "metadata.json")
-                val metadata = """
-                    {
-                        "packageName": "$packageName",
-                        "versionCode": ${packageInfo.versionCode},
-                        "versionName": "${packageInfo.versionName}",
-                        "creationTime": ${System.currentTimeMillis()},
-                        "isSystemApp": ${(appInfo.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0}
-                    }
-                """.trimIndent()
-                
-                metadataFile.writeText(metadata)
-                
-                // Set up file structure for app data isolation
-                setupFileStructure(envDir, packageName)
-                
-                Log.d(TAG, "Virtual environment set up successfully for $packageName")
-            } catch (e: PackageManager.NameNotFoundException) {
-                Log.e(TAG, "Failed to set up virtual environment: app $packageName not found", e)
-                throw e
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to set up virtual environment for $packageName", e)
-                throw e
+    fun getInstalledApps(): List<AppInfo> {
+        val packageManager = context.packageManager
+        val installedApps = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            packageManager.getInstalledPackages(PackageManager.PackageInfoFlags.of(0))
+        } else {
+            @Suppress("DEPRECATION")
+            packageManager.getInstalledPackages(0)
+        }
+
+        return installedApps
+            .filter { pkg -> 
+                // Filter out system apps and our own app
+                val isNotSystemApp = pkg.applicationInfo.flags and ApplicationInfo.FLAG_SYSTEM == 0
+                val isNotOurApp = !pkg.packageName.startsWith("com.multiclone.app")
+                isNotSystemApp && isNotOurApp
             }
+            .map { pkg -> mapToAppInfo(pkg, packageManager) }
+            .sortedBy { it.appName }
+    }
+
+    /**
+     * Creates a virtual environment for a cloned app
+     */
+    fun createClone(
+        packageName: String, 
+        displayName: String,
+        customIcon: Bitmap?,
+        cloneId: String = UUID.randomUUID().toString()
+    ): CloneInfo {
+        // Get original app info
+        val packageManager = context.packageManager
+        val packageInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            packageManager.getPackageInfo(packageName, PackageManager.PackageInfoFlags.of(0))
+        } else {
+            @Suppress("DEPRECATION")
+            packageManager.getPackageInfo(packageName, 0)
+        }
+        
+        val appInfo = mapToAppInfo(packageInfo, packageManager)
+        
+        // Create virtual environment directory
+        val virtualEnvDir = getCloneEnvironmentDirectory(cloneId)
+        virtualEnvDir.mkdirs()
+        
+        // Save customized icon if provided
+        val iconBitmap = customIcon ?: IconUtils.drawableToBitmap(appInfo.icon)
+        val iconFile = File(virtualEnvDir, "icon.png")
+        IconUtils.saveBitmapToFile(iconBitmap, iconFile)
+        
+        // Create and return clone info
+        return CloneInfo(
+            id = cloneId,
+            packageName = packageName,
+            originalAppName = appInfo.appName,
+            displayName = displayName,
+            customIcon = iconBitmap,
+            virtualEnvironmentId = cloneId,
+            creationTimestamp = System.currentTimeMillis(),
+            lastUsedTimestamp = System.currentTimeMillis()
+        )
+    }
+
+    /**
+     * Launch a cloned app using CloneProxyActivity
+     */
+    fun launchClone(cloneInfo: CloneInfo) {
+        val intent = Intent(context, CloneProxyActivity::class.java).apply {
+            putExtra("packageName", cloneInfo.packageName)
+            putExtra("cloneId", cloneInfo.id)
+            putExtra("displayName", cloneInfo.displayName)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+        context.startActivity(intent)
+        
+        // Update last used timestamp
+        cloneInfo.lastUsedTimestamp = System.currentTimeMillis()
+    }
+
+    /**
+     * Delete a cloned app's virtual environment
+     */
+    fun deleteClone(cloneInfo: CloneInfo): Boolean {
+        val virtualEnvDir = getCloneEnvironmentDirectory(cloneInfo.virtualEnvironmentId)
+        return if (virtualEnvDir.exists()) {
+            virtualEnvDir.deleteRecursively()
+        } else {
+            false
         }
     }
-    
+
     /**
-     * Clean up a virtual environment
-     * @param envId the ID of the environment to clean up
+     * Get the virtual environment directory for a clone
      */
-    suspend fun cleanupVirtualEnvironment(envId: String) {
-        withContext(Dispatchers.IO) {
-            Log.d(TAG, "Cleaning up virtual environment $envId")
-            
-            val envDir = getEnvDirectory(envId)
-            if (envDir.exists()) {
-                // Delete the entire environment directory
-                try {
-                    envDir.deleteRecursively()
-                    Log.d(TAG, "Virtual environment $envId cleaned up successfully")
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to clean up virtual environment $envId", e)
-                    throw e
-                }
-            } else {
-                Log.w(TAG, "Virtual environment $envId does not exist")
-            }
-        }
+    private fun getCloneEnvironmentDirectory(cloneId: String): File {
+        val baseDir = File(context.filesDir, VIRTUAL_ENV_DIR)
+        return File(baseDir, cloneId)
     }
-    
+
     /**
-     * Get the directory for a virtual environment
-     * @param envId the ID of the environment
-     * @return the environment directory
+     * Map PackageInfo to our AppInfo data model
      */
-    fun getEnvDirectory(envId: String): File {
-        return File(virtualEnvRootDir, envId)
-    }
-    
-    /**
-     * Set up file structure for app data isolation
-     * @param envDir the environment directory
-     * @param packageName the package name of the app
-     */
-    private fun setupFileStructure(envDir: File, packageName: String) {
-        // Create app-specific directories
-        val dataDir = File(envDir, "data")
+    private fun mapToAppInfo(packageInfo: PackageInfo, packageManager: PackageManager): AppInfo {
+        val appName = packageInfo.applicationInfo.loadLabel(packageManager).toString()
+        val icon = packageInfo.applicationInfo.loadIcon(packageManager)
+        val isSystemApp = (packageInfo.applicationInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
         
-        // Create shared preferences directory
-        File(dataDir, "shared_prefs").mkdirs()
-        
-        // Create databases directory
-        File(dataDir, "databases").mkdirs()
-        
-        // Create files directory
-        File(dataDir, "files").mkdirs()
-        
-        // Create app-specific cache directory
-        val cacheDir = File(envDir, "cache")
-        cacheDir.mkdirs()
-        
-        // Create a config file to store environment configuration
-        val configFile = File(envDir, "config.json")
-        val config = """
-            {
-                "package": "$packageName",
-                "dataPath": "${dataDir.absolutePath}",
-                "cachePath": "${cacheDir.absolutePath}",
-                "isolationLevel": "full",
-                "allowExternalDataAccess": false,
-                "allowNetworkAccess": true,
-                "redirectedPaths": {
-                    "/data/data/$packageName": "${dataDir.absolutePath}",
-                    "/data/user/0/$packageName": "${dataDir.absolutePath}"
-                }
-            }
-        """.trimIndent()
-        
-        configFile.writeText(config)
+        return AppInfo(
+            packageName = packageInfo.packageName,
+            appName = appName,
+            versionName = packageInfo.versionName,
+            icon = icon,
+            isSystemApp = isSystemApp
+        )
     }
 }
