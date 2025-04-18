@@ -43,6 +43,11 @@ jobs:
 
     - name: Setup Android SDK Tools
       uses: android-actions/setup-android@v2
+      
+    - name: Create local.properties file
+      run: |
+        echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
+        cat local.properties
         
     - name: Make Keystore Directory
       run: mkdir -p keystore

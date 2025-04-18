@@ -58,6 +58,13 @@ class CloneRepository @Inject constructor(
     }
     
     /**
+     * Get a clone by ID (non-suspending version)
+     */
+    fun getCloneById(cloneId: String): CloneInfo? {
+        return clonesList.find { it.id == cloneId }
+    }
+    
+    /**
      * Create a new clone
      */
     suspend fun createClone(
@@ -104,6 +111,16 @@ class CloneRepository @Inject constructor(
         
         clonesList.find { it.id == cloneId }?.let { clone ->
             clone.lastUsedTimestamp = System.currentTimeMillis()
+            saveClones()
+        }
+    }
+    
+    /**
+     * Update last used timestamp for a clone (non-suspending version)
+     */
+    fun updateLastUsedTime(cloneId: String, timestamp: Long = System.currentTimeMillis()) {
+        clonesList.find { it.id == cloneId }?.let { clone ->
+            clone.lastUsedTimestamp = timestamp
             saveClones()
         }
     }

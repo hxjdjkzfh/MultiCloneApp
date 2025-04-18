@@ -64,12 +64,10 @@ object UseCaseModule {
      */
     @Provides
     fun provideLaunchCloneUseCase(
-        cloneRepository: CloneRepository,
-        virtualAppEngine: VirtualAppEngine
+        cloneRepository: CloneRepository
     ): LaunchCloneUseCase {
         return LaunchCloneUseCase(
-            cloneRepository = cloneRepository,
-            virtualAppEngine = virtualAppEngine
+            cloneRepository = cloneRepository
         )
     }
 }

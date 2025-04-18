@@ -8,12 +8,12 @@ import java.io.File
 import java.io.FileOutputStream
 
 /**
- * Utility class for icon-related operations
+ * Utility class for handling app icons
  */
 object IconUtils {
     
     /**
-     * Convert a Drawable to a Bitmap
+     * Convert a drawable to a bitmap
      */
     fun drawableToBitmap(drawable: Drawable): Bitmap {
         if (drawable is BitmapDrawable) {
@@ -67,5 +67,32 @@ object IconUtils {
         } else {
             null
         }
+    }
+    
+    /**
+     * Create a circular bitmap from a square bitmap
+     */
+    fun createCircularBitmap(bitmap: Bitmap): Bitmap {
+        val output = Bitmap.createBitmap(
+            bitmap.width,
+            bitmap.height,
+            Bitmap.Config.ARGB_8888
+        )
+        val canvas = Canvas(output)
+        
+        val paint = android.graphics.Paint().apply {
+            isAntiAlias = true
+            color = android.graphics.Color.BLACK
+        }
+        
+        val rect = android.graphics.Rect(0, 0, bitmap.width, bitmap.height)
+        val rectF = android.graphics.RectF(rect)
+        
+        canvas.drawOval(rectF, paint)
+        
+        paint.xfermode = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.SRC_IN)
+        canvas.drawBitmap(bitmap, rect, rect, paint)
+        
+        return output
     }
 }

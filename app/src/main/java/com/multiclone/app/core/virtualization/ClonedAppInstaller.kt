@@ -1,222 +1,126 @@
 package com.multiclone.app.core.virtualization
 
 import android.content.Context
+import android.content.pm.ApplicationInfo
+import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
-import android.os.Build
-import android.util.Log
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import android.graphics.Bitmap
+import androidx.core.content.pm.PackageInfoCompat
+import com.multiclone.app.data.model.CloneInfo
 import java.io.File
-import java.io.FileOutputStream
-import java.util.zip.ZipEntry
-import java.util.zip.ZipFile
-import java.util.zip.ZipOutputStream
+import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Handles the extraction, modification, and installation of cloned apps
+ * Handles the installation of cloned apps
+ * This class creates the necessary infrastructure for running a cloned app
  */
 @Singleton
 class ClonedAppInstaller @Inject constructor(
     private val context: Context
 ) {
-    private val TAG = "ClonedAppInstaller"
-    
-    // Directory for extracting and storing app packages
-    private val appsDir by lazy {
-        File(context.filesDir, "app_packages").apply {
-            if (!exists()) {
-                mkdirs()
-            }
-        }
+    companion object {
+        private const val VIRTUAL_ENV_DIR = "virtual_environments"
     }
     
     /**
-     * Install a cloned version of the app
-     * 
-     * @param packageName The package name of the original app
-     * @param cloneIndex The index of this clone (for multiple clones of the same app)
-     * @return True if installation was successful, false otherwise
+     * Create a new clone of the given package
      */
-    suspend fun installClonedApp(packageName: String, cloneIndex: Int): Boolean = withContext(Dispatchers.IO) {
-        try {
-            // Get the source APK path
-            val sourceApkPath = getSourceApkPath(packageName)
-            if (sourceApkPath.isNullOrEmpty()) {
-                Log.e(TAG, "Source APK not found for package: $packageName")
-                return@withContext false
-            }
-            
-            // Extract and modify the APK
-            val modifiedApkFile = modifyApk(packageName, sourceApkPath, cloneIndex)
-            if (modifiedApkFile == null) {
-                Log.e(TAG, "Failed to modify APK for package: $packageName")
-                return@withContext false
-            }
-            
-            // In a real implementation, we would install the modified APK here
-            // For this implementation, we'll simulate successful installation
-            simulateInstallation(packageName, cloneIndex)
-            
-            true
-        } catch (e: Exception) {
-            Log.e(TAG, "Error installing cloned app", e)
-            false
-        }
-    }
-    
-    /**
-     * Get the path to the original app's APK file
-     */
-    private fun getSourceApkPath(packageName: String): String? {
-        return try {
-            val packageInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                context.packageManager.getPackageInfo(packageName, PackageManager.PackageInfoFlags.of(0))
-            } else {
-                @Suppress("DEPRECATION")
-                context.packageManager.getPackageInfo(packageName, 0)
-            }
-            
-            packageInfo.applicationInfo.sourceDir
-        } catch (e: Exception) {
-            Log.e(TAG, "Error getting source APK path", e)
-            null
-        }
-    }
-    
-    /**
-     * Extract, modify, and repackage the APK for cloning
-     */
-    private fun modifyApk(packageName: String, sourceApkPath: String, cloneIndex: Int): File? {
-        try {
-            // Create a directory for this extraction
-            val extractDir = File(appsDir, "${packageName}_$cloneIndex")
-            if (extractDir.exists()) {
-                extractDir.deleteRecursively()
-            }
-            extractDir.mkdirs()
-            
-            // In a real implementation, we would:
-            // 1. Extract the APK
-            // 2. Modify the AndroidManifest.xml to change the package name
-            // 3. Update resources
-            // 4. Repackage into a new APK
-            // 5. Sign the APK
-            
-            // For this simulation, we'll just create a dummy file
-            val modifiedApkFile = File(extractDir, "modified_${packageName}_$cloneIndex.apk")
-            // Copy the original APK (in a real implementation, this would be the modified APK)
-            File(sourceApkPath).copyTo(modifiedApkFile, overwrite = true)
-            
-            return modifiedApkFile
-        } catch (e: Exception) {
-            Log.e(TAG, "Error modifying APK", e)
-            return null
-        }
-    }
-    
-    /**
-     * Simulate installing the cloned app
-     * In a real implementation, this would use PackageInstaller APIs
-     */
-    private fun simulateInstallation(packageName: String, cloneIndex: Int): Boolean {
-        // Create a record of the installation
-        val installRecord = File(appsDir, "install_${packageName}_$cloneIndex.json")
-        val recordContent = """
-            {
-              "packageName": "$packageName",
-              "cloneIndex": $cloneIndex,
-              "installTime": ${System.currentTimeMillis()},
-              "status": "installed",
-              "clonePackageName": "com.multiclone.${packageName}_$cloneIndex"
-            }
-        """.trimIndent()
+    fun createClone(
+        packageName: String,
+        displayName: String,
+        customIcon: Bitmap? = null
+    ): CloneInfo {
+        // Get information about the original app
+        val packageInfo = context.packageManager.getPackageInfo(packageName, 0)
+        val applicationInfo = packageInfo.applicationInfo
+        val originalAppName = applicationInfo.loadLabel(context.packageManager).toString()
         
-        installRecord.writeText(recordContent)
+        // Generate unique IDs for the clone
+        val cloneId = UUID.randomUUID().toString()
+        val virtualEnvId = UUID.randomUUID().toString()
         
-        Log.d(TAG, "Simulated installation for ${packageName}_$cloneIndex")
-        return true
+        // Create virtual environment
+        val environment = CloneEnvironment(
+            context = context,
+            cloneId = cloneId,
+            packageName = packageName,
+            displayName = displayName
+        )
+        environment.initialize()
+        
+        // Copy necessary app data to the virtual environment
+        copyAppData(applicationInfo, environment)
+        
+        // Create the CloneInfo object
+        return CloneInfo(
+            id = cloneId,
+            packageName = packageName,
+            originalAppName = originalAppName,
+            displayName = displayName,
+            customIcon = customIcon,
+            virtualEnvironmentId = virtualEnvId,
+            creationTimestamp = System.currentTimeMillis(),
+            lastUsedTimestamp = System.currentTimeMillis()
+        )
     }
     
     /**
-     * Check if a cloned app is installed
+     * Delete a cloned app
      */
-    fun isCloneInstalled(packageName: String, cloneIndex: Int): Boolean {
-        val installRecord = File(appsDir, "install_${packageName}_$cloneIndex.json")
-        return installRecord.exists()
+    fun deleteClone(cloneInfo: CloneInfo): Boolean {
+        val environment = CloneEnvironment(
+            context = context,
+            cloneId = cloneInfo.id,
+            packageName = cloneInfo.packageName,
+            displayName = cloneInfo.displayName
+        )
+        
+        return environment.delete()
     }
     
     /**
-     * Uninstall a cloned app
+     * Update a cloned app (after the original app has been updated)
      */
-    suspend fun uninstallClonedApp(packageName: String, cloneIndex: Int): Boolean = withContext(Dispatchers.IO) {
+    fun updateClone(cloneInfo: CloneInfo): Boolean {
         try {
-            // In a real implementation, we would use PackageInstaller to uninstall
-            // For this simulation, just delete our records
+            // Get updated information about the original app
+            val packageInfo = context.packageManager.getPackageInfo(cloneInfo.packageName, 0)
+            val applicationInfo = packageInfo.applicationInfo
             
-            val installRecord = File(appsDir, "install_${packageName}_$cloneIndex.json")
-            if (installRecord.exists()) {
-                installRecord.delete()
-            }
+            // Get the virtual environment
+            val environment = CloneEnvironment(
+                context = context,
+                cloneId = cloneInfo.id,
+                packageName = cloneInfo.packageName,
+                displayName = cloneInfo.displayName
+            )
             
-            val extractDir = File(appsDir, "${packageName}_$cloneIndex")
-            if (extractDir.exists()) {
-                extractDir.deleteRecursively()
-            }
-            
-            Log.d(TAG, "Simulated uninstallation for ${packageName}_$cloneIndex")
-            true
-        } catch (e: Exception) {
-            Log.e(TAG, "Error uninstalling cloned app", e)
-            false
-        }
-    }
-    
-    /**
-     * Add a file to a ZIP (APK) file
-     */
-    private fun addFileToZip(zipFilePath: String, fileName: String, fileContent: ByteArray): Boolean {
-        try {
-            // Read the existing ZIP file
-            val tempFile = File.createTempFile("temp_", ".zip")
-            val existingEntries = mutableListOf<ZipEntry>()
-            val existingContents = mutableMapOf<ZipEntry, ByteArray>()
-            
-            ZipFile(zipFilePath).use { zip ->
-                zip.entries().asSequence().forEach { entry ->
-                    if (entry.name != fileName) {  // Skip the file we want to replace
-                        existingEntries.add(entry)
-                        zip.getInputStream(entry).use { input ->
-                            existingContents[entry] = input.readBytes()
-                        }
-                    }
-                }
-            }
-            
-            // Create a new ZIP file with the modified content
-            ZipOutputStream(FileOutputStream(tempFile)).use { zipOut ->
-                // Add existing entries
-                for (entry in existingEntries) {
-                    zipOut.putNextEntry(ZipEntry(entry.name))
-                    zipOut.write(existingContents[entry])
-                    zipOut.closeEntry()
-                }
-                
-                // Add the new/modified file
-                zipOut.putNextEntry(ZipEntry(fileName))
-                zipOut.write(fileContent)
-                zipOut.closeEntry()
-            }
-            
-            // Replace the original ZIP file
-            tempFile.copyTo(File(zipFilePath), overwrite = true)
-            tempFile.delete()
+            // Update necessary files in the virtual environment
+            copyAppData(applicationInfo, environment)
             
             return true
         } catch (e: Exception) {
-            Log.e(TAG, "Error adding file to ZIP", e)
+            e.printStackTrace()
             return false
         }
+    }
+    
+    /**
+     * Copy necessary data from the original app to the virtual environment
+     */
+    private fun copyAppData(applicationInfo: ApplicationInfo, environment: CloneEnvironment) {
+        // In a real implementation, this would:
+        // 1. Copy APK file (if needed)
+        // 2. Extract and modify manifest
+        // 3. Setup resource redirection
+        // 4. Setup storage isolation
+        
+        // For this demo, we'll just create a placeholder file
+        val placeholderFile = File(environment.filesDir, "app_info.txt")
+        placeholderFile.writeText("Original Package: ${applicationInfo.packageName}\n" +
+                              "Virtual Environment ID: ${environment.cloneId}\n" +
+                              "Created on: ${System.currentTimeMillis()}")
     }
 }

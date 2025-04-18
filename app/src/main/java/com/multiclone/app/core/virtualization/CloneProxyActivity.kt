@@ -1,93 +1,109 @@
 package com.multiclone.app.core.virtualization
 
+import android.app.Activity
+import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
-import android.widget.Toast
-import androidx.activity.ComponentActivity
-import androidx.lifecycle.lifecycleScope
+import com.multiclone.app.data.repository.CloneRepository
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 /**
- * A proxy activity that handles launching cloned apps
- * This activity receives a clone ID, loads its virtual environment,
- * then launches the actual app inside that environment
+ * Proxy activity that redirects to the real app after setting up the virtual environment
  */
 @AndroidEntryPoint
-class CloneProxyActivity : ComponentActivity() {
-
+class CloneProxyActivity : Activity() {
+    
     @Inject
-    lateinit var virtualAppEngine: VirtualAppEngine
-
+    lateinit var cloneRepository: CloneRepository
+    
+    @Inject
+    lateinit var virtualAppManager: VirtualAppManager
+    
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        val packageName = intent.getStringExtra("packageName")
-        val cloneId = intent.getStringExtra("cloneId")
-        val displayName = intent.getStringExtra("displayName")
-        
-        if (packageName == null || cloneId == null) {
-            Toast.makeText(this, "Error: Missing package information", Toast.LENGTH_SHORT).show()
+        // Get the package name and clone ID from intent
+        val packageName = intent.getStringExtra("packageName") ?: run {
             finish()
             return
         }
         
-        launchClonedApp(packageName, cloneId, displayName ?: packageName)
+        val cloneId = intent.getStringExtra("cloneId") ?: run {
+            finish()
+            return
+        }
+        
+        // Update last used timestamp
+        CoroutineScope(Dispatchers.IO).launch {
+            cloneRepository.updateLastUsedTime(cloneId, System.currentTimeMillis())
+        }
+        
+        // Prepare the virtual environment
+        setupVirtualEnvironment(packageName, cloneId)
+        
+        // Launch the real app
+        launchOriginalApp(packageName)
     }
     
-    private fun launchClonedApp(packageName: String, cloneId: String, displayName: String) {
-        lifecycleScope.launch {
-            try {
-                // Setup virtual environment
-                withContext(Dispatchers.IO) {
-                    // Ensure the CloneManagerService is running
-                    startService(Intent(this@CloneProxyActivity, CloneManagerService::class.java))
-                    
-                    // Prepare the environment - in a real app, this would set up file redirection,
-                    // permission isolation, etc.
-                }
-                
-                // Launch the actual application
-                val launchIntent = getLaunchIntentForPackage(packageName)
-                if (launchIntent != null) {
-                    // In a real implementation, we would modify the intent to use our virtualization layer
-                    launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    
-                    // Add environment info
-                    launchIntent.putExtra("VIRTUAL_ENV_ID", cloneId)
-                    launchIntent.putExtra("CLONE_DISPLAY_NAME", displayName)
-                    
-                    startActivity(launchIntent)
-                } else {
-                    Toast.makeText(
-                        this@CloneProxyActivity,
-                        "Unable to launch $displayName",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
-            } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(
-                        this@CloneProxyActivity, 
-                        "Error launching app: ${e.message}",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
-            } finally {
-                // Always finish this proxy activity
-                finish()
-            }
+    private fun setupVirtualEnvironment(packageName: String, cloneId: String) {
+        // Register the clone with the virtual app manager
+        virtualAppManager.prepareCloneForLaunch(packageName, cloneId)
+    }
+    
+    private fun launchOriginalApp(packageName: String) {
+        // Find the main activity of the target app
+        val intent = getLaunchIntentForPackage(packageName)
+        
+        if (intent != null) {
+            // Add flags to create a new task
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            
+            // Add our custom data to identify this as a cloned instance
+            intent.putExtra("com.multiclone.IS_CLONE", true)
+            
+            // Start the activity
+            startActivity(intent)
         }
+        
+        // Finish this proxy activity
+        finish()
     }
     
     private fun getLaunchIntentForPackage(packageName: String): Intent? {
+        // Get the package manager
+        val pm = packageManager
+        
+        // Try to get the launch intent for the package
         return try {
-            packageManager.getLaunchIntentForPackage(packageName)
+            // Get all activities with LAUNCHER category
+            val intent = Intent(Intent.ACTION_MAIN, null)
+            intent.addCategory(Intent.CATEGORY_LAUNCHER)
+            intent.setPackage(packageName)
+            
+            val resolveInfoList = pm.queryIntentActivities(intent, 0)
+            
+            if (resolveInfoList.isNotEmpty()) {
+                val resolveInfo = resolveInfoList[0]
+                val activityInfo = resolveInfo.activityInfo
+                
+                // Create an intent to launch the specific activity
+                Intent().apply {
+                    component = ComponentName(
+                        activityInfo.applicationInfo.packageName,
+                        activityInfo.name
+                    )
+                }
+            } else {
+                null
+            }
         } catch (e: Exception) {
+            e.printStackTrace()
             null
         }
     }

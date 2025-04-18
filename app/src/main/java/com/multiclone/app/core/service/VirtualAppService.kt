@@ -74,4 +74,11 @@ class VirtualAppService @Inject constructor(
     fun releaseEnvironment(cloneId: String) {
         cloneManagerService?.releaseEnvironment(cloneId)
     }
+    
+    /**
+     * Start a clone session for a particular app
+     */
+    fun startCloneSession(cloneInfo: com.multiclone.app.data.model.CloneInfo): Boolean {
+        return cloneManagerService?.startCloneSession(cloneInfo) ?: false
+    }
 }

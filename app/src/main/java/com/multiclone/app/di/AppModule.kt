@@ -51,4 +51,15 @@ object AppModule {
     ): CloneRepository {
         return CloneRepository(context, virtualAppEngine)
     }
+    
+    /**
+     * Provides the VirtualAppService instance
+     */
+    @Singleton
+    @Provides
+    fun provideVirtualAppService(
+        @ApplicationContext context: Context
+    ): com.multiclone.app.core.service.VirtualAppService {
+        return com.multiclone.app.core.service.VirtualAppService(context)
+    }
 }
