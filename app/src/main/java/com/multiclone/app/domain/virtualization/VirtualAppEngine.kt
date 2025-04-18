@@ -1,23 +1,26 @@
 package com.multiclone.app.domain.virtualization
 
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ApplicationInfo
+import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
-import android.os.Bundle
-import android.os.UserManager
 import android.util.Log
-import com.multiclone.app.CloneProxyActivity
+import androidx.core.content.FileProvider
+import com.multiclone.app.data.model.AppInfo
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.File
+import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Core engine that handles app virtualization and isolation
+ * Core engine responsible for virtualizing Android applications
+ * Manages the isolation, environment setup, and execution of cloned apps
  */
 @Singleton
 class VirtualAppEngine @Inject constructor(
@@ -25,165 +28,304 @@ class VirtualAppEngine @Inject constructor(
     private val cloneEnvironment: CloneEnvironment,
     private val clonedAppInstaller: ClonedAppInstaller
 ) {
-    private val TAG = "VirtualAppEngine"
-    private val userManager = context.getSystemService(Context.USER_SERVICE) as? UserManager
-    private val packageManager = context.packageManager
-    
+    companion object {
+        private const val TAG = "VirtualAppEngine"
+    }
+
     /**
-     * Create a new virtual environment for an app
-     * @return The ID of the created virtual environment
+     * Creates a new virtual environment for a package
+     *
+     * @param packageName The package name of the app to virtualize
+     * @param cloneId Unique identifier for this clone instance
+     * @return Result containing the environment ID if successful
      */
-    suspend fun createVirtualEnvironment(packageName: String, cloneId: String): Result<String> = withContext(Dispatchers.IO) {
+    suspend fun createVirtualEnvironment(
+        packageName: String,
+        cloneId: String
+    ): Result<String> = withContext(Dispatchers.IO) {
         try {
-            Log.d(TAG, "Creating virtual environment for $packageName with ID $cloneId")
+            Log.i(TAG, "Creating virtual environment for package: $packageName, cloneId: $cloneId")
+
+            // Generate a unique environment ID
+            val environmentId = UUID.randomUUID().toString()
             
-            // Create isolated environment
-            val environmentId = cloneEnvironment.createEnvironment(cloneId)
-            
-            // Install app in the virtual environment
-            val installResult = clonedAppInstaller.installApp(packageName, environmentId)
-            if (!installResult) {
-                return@withContext Result.failure(
-                    Exception("Failed to install app in virtual environment")
-                )
+            // Create isolated environment for the app
+            val environmentPath = cloneEnvironment.createEnvironment(environmentId)
+            if (environmentPath == null) {
+                Log.e(TAG, "Failed to create environment directory")
+                return@withContext Result.failure(Exception("Failed to create environment directory"))
             }
             
-            // Set up hooks for app launching and IPC redirection
-            setupVirtualizationHooks(packageName, environmentId)
+            Log.d(TAG, "Created environment at: $environmentPath")
             
-            Result.success(environmentId)
+            // Extract the app's resources and prepare the environment
+            val extractResult = clonedAppInstaller.extractAppResources(
+                packageName = packageName,
+                environmentPath = environmentPath
+            )
+            
+            if (extractResult.isFailure) {
+                Log.e(TAG, "Failed to extract app resources: ${extractResult.exceptionOrNull()?.message}")
+                return@withContext Result.failure(extractResult.exceptionOrNull() 
+                    ?: Exception("Failed to extract app resources"))
+            }
+            
+            // Register the environment ID with the clone
+            cloneEnvironment.registerEnvironmentForClone(cloneId, environmentId)
+            
+            Log.i(TAG, "Successfully created virtual environment with ID: $environmentId")
+            
+            return@withContext Result.success(environmentId)
         } catch (e: Exception) {
             Log.e(TAG, "Error creating virtual environment", e)
-            Result.failure(e)
+            return@withContext Result.failure(e)
         }
     }
-    
+
     /**
-     * Launch an app in its virtual environment using proxy activity
+     * Launches a cloned app in the virtual environment
+     *
+     * @param cloneId The ID of the clone to launch
+     * @param packageName The package name of the original app
+     * @return Result indicating success or failure
      */
-    suspend fun launchApp(cloneId: String, environmentId: String, packageName: String): Result<Boolean> = withContext(Dispatchers.IO) {
+    suspend fun launchVirtualApp(
+        cloneId: String,
+        packageName: String
+    ): Result<Unit> = withContext(Dispatchers.IO) {
         try {
-            Log.d(TAG, "Launching $packageName in environment $environmentId")
+            Log.i(TAG, "Launching virtual app: $packageName, cloneId: $cloneId")
             
-            // Prepare environment before launching
-            cloneEnvironment.prepareEnvironment(environmentId)
+            // Get the environment ID for this clone
+            val environmentId = cloneEnvironment.getEnvironmentIdForClone(cloneId)
+            if (environmentId == null) {
+                Log.e(TAG, "No environment found for clone: $cloneId")
+                return@withContext Result.failure(Exception("No environment found for this clone"))
+            }
             
-            // Find the app's main activity
-            val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
+            // Get the launch intent for the original app
+            val launchIntent = context.packageManager.getLaunchIntentForPackage(packageName)
             if (launchIntent == null) {
-                return@withContext Result.failure(
-                    IllegalStateException("Unable to find launch intent for $packageName")
+                Log.e(TAG, "No launch intent found for package: $packageName")
+                return@withContext Result.failure(Exception("No launch intent found for this app"))
+            }
+            
+            // Prepare the intent for proxying through our CloneProxyActivity
+            val proxyIntent = Intent("com.multiclone.app.LAUNCH_CLONE").apply {
+                putExtra("clone_id", cloneId)
+                putExtra("environment_id", environmentId)
+                putExtra("package_name", packageName)
+                putExtra("original_intent", launchIntent)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            
+            // Launch the proxy activity
+            context.startActivity(proxyIntent)
+            
+            Log.i(TAG, "Virtual app launched successfully")
+            
+            return@withContext Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error launching virtual app", e)
+            return@withContext Result.failure(e)
+        }
+    }
+
+    /**
+     * Destroys a virtual environment
+     *
+     * @param cloneId The ID of the clone to destroy
+     * @return Result indicating success or failure
+     */
+    suspend fun destroyVirtualEnvironment(cloneId: String): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            Log.i(TAG, "Destroying virtual environment for clone: $cloneId")
+            
+            // Get the environment ID for this clone
+            val environmentId = cloneEnvironment.getEnvironmentIdForClone(cloneId)
+            if (environmentId == null) {
+                Log.e(TAG, "No environment found for clone: $cloneId")
+                return@withContext Result.failure(Exception("No environment found for this clone"))
+            }
+            
+            // Delete the environment directory
+            val success = cloneEnvironment.destroyEnvironment(environmentId)
+            if (!success) {
+                Log.e(TAG, "Failed to destroy environment: $environmentId")
+                return@withContext Result.failure(Exception("Failed to destroy environment"))
+            }
+            
+            // Unregister the environment for this clone
+            cloneEnvironment.unregisterEnvironmentForClone(cloneId)
+            
+            Log.i(TAG, "Virtual environment destroyed successfully")
+            
+            return@withContext Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error destroying virtual environment", e)
+            return@withContext Result.failure(e)
+        }
+    }
+
+    /**
+     * Gets information about an installed app
+     *
+     * @param packageName The package name of the app
+     * @return The app information or null if not found
+     */
+    suspend fun getAppInfo(packageName: String): AppInfo? = withContext(Dispatchers.IO) {
+        try {
+            Log.d(TAG, "Getting app info for package: $packageName")
+            
+            val packageManager = context.packageManager
+            
+            // Get package info
+            val packageInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                packageManager.getPackageInfo(
+                    packageName,
+                    PackageManager.PackageInfoFlags.of(
+                        (PackageManager.GET_ACTIVITIES or
+                                PackageManager.GET_SERVICES or
+                                PackageManager.GET_PROVIDERS or
+                                PackageManager.GET_RECEIVERS or
+                                PackageManager.GET_META_DATA).toLong()
+                    )
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                packageManager.getPackageInfo(
+                    packageName,
+                    PackageManager.GET_ACTIVITIES or
+                            PackageManager.GET_SERVICES or
+                            PackageManager.GET_PROVIDERS or
+                            PackageManager.GET_RECEIVERS or
+                            PackageManager.GET_META_DATA
                 )
             }
             
-            // Get the component that should be launched
-            val component = launchIntent.component
-            if (component == null) {
-                return@withContext Result.failure(
-                    IllegalStateException("Unable to determine component to launch for $packageName")
+            // Get application info
+            val applicationInfo = packageInfo.applicationInfo
+            
+            // Create app info object
+            val appInfo = AppInfo(
+                packageName = packageName,
+                appName = applicationInfo.loadLabel(packageManager).toString(),
+                versionName = packageInfo.versionName ?: "",
+                versionCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    packageInfo.longVersionCode
+                } else {
+                    @Suppress("DEPRECATION")
+                    packageInfo.versionCode.toLong()
+                },
+                installTime = packageInfo.firstInstallTime,
+                lastUpdateTime = packageInfo.lastUpdateTime,
+                isSystemApp = (applicationInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0,
+                appIcon = packageManager.getApplicationIcon(applicationInfo)
+            )
+            
+            Log.d(TAG, "Got app info: ${appInfo.appName} (${appInfo.packageName})")
+            
+            return@withContext appInfo
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting app info", e)
+            return@withContext null
+        }
+    }
+
+    /**
+     * Checks if an app can be virtualized
+     *
+     * @param packageName The package name of the app
+     * @return True if the app can be virtualized, false otherwise
+     */
+    suspend fun canVirtualizeApp(packageName: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            Log.d(TAG, "Checking if app can be virtualized: $packageName")
+            
+            val packageManager = context.packageManager
+            
+            // Get package info
+            val packageInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                packageManager.getPackageInfo(
+                    packageName,
+                    PackageManager.PackageInfoFlags.of(
+                        (PackageManager.GET_PERMISSIONS).toLong()
+                    )
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                packageManager.getPackageInfo(
+                    packageName,
+                    PackageManager.GET_PERMISSIONS
                 )
             }
             
-            // Create an intent to our proxy activity which will handle the virtualization
-            val proxyIntent = Intent(context, CloneProxyActivity::class.java).apply {
-                // Add flags
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            // Check if this is a system app (we can't virtualize system apps)
+            val isSystemApp = (packageInfo.applicationInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
+            if (isSystemApp) {
+                Log.d(TAG, "Can't virtualize system app: $packageName")
+                return@withContext false
+            }
+            
+            // We can virtualize this app
+            Log.d(TAG, "App can be virtualized: $packageName")
+            return@withContext true
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking if app can be virtualized", e)
+            return@withContext false
+        }
+    }
+
+    /**
+     * Gets a list of all installed apps that can be virtualized
+     *
+     * @return A list of app infos
+     */
+    suspend fun getVirtualizableApps(): List<AppInfo> = withContext(Dispatchers.IO) {
+        try {
+            Log.d(TAG, "Getting list of virtualizable apps")
+            
+            val packageManager = context.packageManager
+            val installedApps = mutableListOf<AppInfo>()
+            
+            // Get all installed packages
+            val packages = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                packageManager.getInstalledPackages(
+                    PackageManager.PackageInfoFlags.of(0)
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                packageManager.getInstalledPackages(0)
+            }
+            
+            // Filter packages
+            for (packageInfo in packages) {
+                val packageName = packageInfo.packageName
                 
-                // Add information about the target app and environment
-                putExtra(CloneProxyActivity.EXTRA_TARGET_PACKAGE, packageName)
-                putExtra(CloneProxyActivity.EXTRA_TARGET_COMPONENT, component.className)
-                putExtra(CloneProxyActivity.EXTRA_ENVIRONMENT_ID, environmentId)
-                putExtra(CloneProxyActivity.EXTRA_CLONE_ID, cloneId)
+                // Skip system apps
+                val isSystemApp = (packageInfo.applicationInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
+                if (isSystemApp) {
+                    continue
+                }
                 
-                // Pass along any other extras from the original intent
-                launchIntent.extras?.let { bundle ->
-                    putExtras(bundle)
+                // Skip our own app
+                if (packageName == context.packageName) {
+                    continue
+                }
+                
+                // Get app info
+                val appInfo = getAppInfo(packageName)
+                if (appInfo != null) {
+                    installedApps.add(appInfo)
                 }
             }
             
-            // Start the proxy activity
-            context.startActivity(proxyIntent)
-            Result.success(true)
+            Log.d(TAG, "Found ${installedApps.size} virtualizable apps")
+            
+            return@withContext installedApps
         } catch (e: Exception) {
-            Log.e(TAG, "Error launching app", e)
-            Result.failure(e)
+            Log.e(TAG, "Error getting virtualizable apps", e)
+            return@withContext emptyList()
         }
-    }
-    
-    /**
-     * Launch app by creating a shortcut
-     */
-    fun createAppShortcutIntent(cloneId: String, environmentId: String, packageName: String, customLabel: String): Intent {
-        Log.d(TAG, "Creating shortcut intent for $packageName in environment $environmentId")
-        
-        // Create an intent to our proxy activity
-        return Intent(context, CloneProxyActivity::class.java).apply {
-            action = Intent.ACTION_MAIN
-            addCategory(Intent.CATEGORY_LAUNCHER)
-            
-            // Add information about the target app and environment
-            putExtra(CloneProxyActivity.EXTRA_TARGET_PACKAGE, packageName)
-            putExtra(CloneProxyActivity.EXTRA_ENVIRONMENT_ID, environmentId)
-            putExtra(CloneProxyActivity.EXTRA_CLONE_ID, cloneId)
-            putExtra(CloneProxyActivity.EXTRA_CUSTOM_LABEL, customLabel)
-            
-            // Set a unique data URI to ensure multiple shortcuts can exist
-            data = Uri.parse("multiclone://$cloneId/$packageName")
-        }
-    }
-    
-    /**
-     * Remove an app's virtual environment
-     */
-    suspend fun removeVirtualEnvironment(environmentId: String): Result<Boolean> = withContext(Dispatchers.IO) {
-        try {
-            Log.d(TAG, "Removing virtual environment $environmentId")
-            
-            cloneEnvironment.removeEnvironment(environmentId)
-            Result.success(true)
-        } catch (e: Exception) {
-            Log.e(TAG, "Error removing virtual environment", e)
-            Result.failure(e)
-        }
-    }
-    
-    /**
-     * Setup virtualization hooks for an app
-     */
-    private suspend fun setupVirtualizationHooks(packageName: String, environmentId: String) {
-        // Set up necessary hooks and redirections for the app
-        // This includes file system, IPC, and permission redirections
-        
-        // Register for broadcast intents from this app
-        // This will be used to intercept and modify IPC calls
-        
-        // Set up content provider hooks if needed
-        
-        Log.d(TAG, "Virtualization hooks set up for $packageName in environment $environmentId")
-    }
-    
-    /**
-     * Check if virtualization is supported on this device
-     */
-    fun isVirtualizationSupported(): Boolean {
-        // Check if the device supports the features we need
-        return true // For now, assume all devices are supported
-    }
-    
-    /**
-     * Get debug information about the virtualization engine
-     */
-    fun getDebugInfo(): Map<String, String> {
-        val debugInfo = mutableMapOf<String, String>()
-        
-        // Add system information
-        debugInfo["androidVersion"] = Build.VERSION.RELEASE
-        debugInfo["sdkLevel"] = Build.VERSION.SDK_INT.toString()
-        debugInfo["device"] = "${Build.MANUFACTURER} ${Build.MODEL}"
-        
-        // Add virtualization capabilities
-        debugInfo["supportsVirtualization"] = isVirtualizationSupported().toString()
-        
-        return debugInfo
     }
 }

@@ -1,342 +1,316 @@
 package com.multiclone.app.domain.virtualization
 
 import android.content.Context
-import android.content.SharedPreferences
-import android.content.pm.PackageManager
-import android.os.Build
-import android.os.Environment
-import android.os.UserManager
 import android.util.Log
-import androidx.security.crypto.EncryptedFile
+import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import java.io.File
-import java.io.FileOutputStream
-import java.security.SecureRandom
-import java.util.UUID
+import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Manages creation and lifecycle of isolated environments for app clones
+ * Manages the isolated environments for cloned applications
+ * Handles environment creation, destruction, and isolation
  */
 @Singleton
 class CloneEnvironment @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
-    private val TAG = "CloneEnvironment"
-    private val userManager = context.getSystemService(Context.USER_SERVICE) as? UserManager
-    private val packageManager = context.packageManager
-    private val secureRandom = SecureRandom()
-    private val envPrefs: SharedPreferences by lazy {
-        context.getSharedPreferences("clone_environments", Context.MODE_PRIVATE)
+    companion object {
+        private const val TAG = "CloneEnvironment"
+        private const val ENV_ROOT_DIR = "virtual_environments"
+        private const val CLONE_ENVIRONMENTS_PREFS = "clone_environments_prefs"
     }
-    
-    // Base directory for all environments
-    private val environmentsBaseDir: File by lazy {
-        File(context.filesDir, "environments").apply { 
-            if (!exists()) mkdirs() 
+
+    private val masterKey: MasterKey by lazy {
+        MasterKey.Builder(context)
+            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+            .build()
+    }
+
+    private val environmentsPrefs by lazy {
+        try {
+            EncryptedSharedPreferences.create(
+                context,
+                CLONE_ENVIRONMENTS_PREFS,
+                masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Error creating encrypted preferences", e)
+            // Fallback to regular preferences
+            context.getSharedPreferences(CLONE_ENVIRONMENTS_PREFS, Context.MODE_PRIVATE)
         }
     }
-    
+
     /**
-     * Create a new isolated environment
-     * @return The ID of the created environment
+     * Creates a new isolated environment for a cloned app
+     *
+     * @param environmentId The ID of the environment to create
+     * @return The path to the new environment, or null if creation failed
      */
-    suspend fun createEnvironment(cloneId: String): String = withContext(Dispatchers.IO) {
-        Log.d(TAG, "Creating environment for clone ID: $cloneId")
-        
-        // Generate a unique environment ID (for enhanced security)
-        val environmentId = UUID.randomUUID().toString()
-        
-        // Create a new directory to store the environment data
-        val environmentDir = File(environmentsBaseDir, environmentId)
-        environmentDir.mkdirs()
-        
-        // Create data directories for the environment
-        createEnvironmentDirectories(environmentDir)
-        
-        // Store mapping between clone ID and environment ID
-        envPrefs.edit()
-            .putString(cloneId, environmentId)
-            .putLong("${environmentId}_created", System.currentTimeMillis())
-            .apply()
-        
-        // Initialize environment with security token
-        initializeEnvironmentSecurity(environmentId)
-        
-        // Return the environment ID
-        environmentId
+    fun createEnvironment(environmentId: String): String? {
+        try {
+            Log.d(TAG, "Creating environment: $environmentId")
+            
+            // Create root directory if it doesn't exist
+            val rootDir = File(context.filesDir, ENV_ROOT_DIR)
+            if (!rootDir.exists() && !rootDir.mkdirs()) {
+                Log.e(TAG, "Failed to create root directory")
+                return null
+            }
+            
+            // Create environment directory
+            val envDir = File(rootDir, environmentId)
+            if (!envDir.exists() && !envDir.mkdirs()) {
+                Log.e(TAG, "Failed to create environment directory")
+                return null
+            }
+            
+            // Create subdirectories for app data
+            val dataDirs = arrayOf(
+                File(envDir, "data"),
+                File(envDir, "cache"),
+                File(envDir, "files"),
+                File(envDir, "databases"),
+                File(envDir, "shared_prefs")
+            )
+            
+            for (dir in dataDirs) {
+                if (!dir.exists() && !dir.mkdirs()) {
+                    Log.e(TAG, "Failed to create directory: ${dir.name}")
+                    return null
+                }
+            }
+            
+            Log.d(TAG, "Environment created successfully: $environmentId")
+            
+            return envDir.absolutePath
+        } catch (e: Exception) {
+            Log.e(TAG, "Error creating environment", e)
+            return null
+        }
     }
-    
+
     /**
-     * Get environment ID from clone ID
+     * Destroys an environment
+     *
+     * @param environmentId The ID of the environment to destroy
+     * @return True if the environment was destroyed successfully, false otherwise
+     */
+    fun destroyEnvironment(environmentId: String): Boolean {
+        try {
+            Log.d(TAG, "Destroying environment: $environmentId")
+            
+            val rootDir = File(context.filesDir, ENV_ROOT_DIR)
+            val envDir = File(rootDir, environmentId)
+            
+            if (!envDir.exists()) {
+                Log.d(TAG, "Environment directory doesn't exist")
+                return true
+            }
+            
+            // Delete environment directory recursively
+            val success = envDir.deleteRecursively()
+            
+            if (success) {
+                Log.d(TAG, "Environment destroyed successfully: $environmentId")
+            } else {
+                Log.e(TAG, "Failed to destroy environment: $environmentId")
+            }
+            
+            return success
+        } catch (e: Exception) {
+            Log.e(TAG, "Error destroying environment", e)
+            return false
+        }
+    }
+
+    /**
+     * Gets the path to an environment
+     *
+     * @param environmentId The ID of the environment
+     * @return The path to the environment, or null if it doesn't exist
+     */
+    fun getEnvironmentPath(environmentId: String): String? {
+        try {
+            val rootDir = File(context.filesDir, ENV_ROOT_DIR)
+            val envDir = File(rootDir, environmentId)
+            
+            if (!envDir.exists()) {
+                Log.d(TAG, "Environment directory doesn't exist: $environmentId")
+                return null
+            }
+            
+            return envDir.absolutePath
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting environment path", e)
+            return null
+        }
+    }
+
+    /**
+     * Registers an environment for a clone
+     *
+     * @param cloneId The ID of the clone
+     * @param environmentId The ID of the environment
+     */
+    fun registerEnvironmentForClone(cloneId: String, environmentId: String) {
+        try {
+            Log.d(TAG, "Registering environment $environmentId for clone $cloneId")
+            
+            environmentsPrefs.edit()
+                .putString(cloneId, environmentId)
+                .apply()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error registering environment for clone", e)
+        }
+    }
+
+    /**
+     * Unregisters an environment for a clone
+     *
+     * @param cloneId The ID of the clone
+     */
+    fun unregisterEnvironmentForClone(cloneId: String) {
+        try {
+            Log.d(TAG, "Unregistering environment for clone $cloneId")
+            
+            environmentsPrefs.edit()
+                .remove(cloneId)
+                .apply()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error unregistering environment for clone", e)
+        }
+    }
+
+    /**
+     * Gets the environment ID for a clone
+     *
+     * @param cloneId The ID of the clone
+     * @return The ID of the environment, or null if not found
      */
     fun getEnvironmentIdForClone(cloneId: String): String? {
-        return envPrefs.getString(cloneId, null)
-    }
-    
-    /**
-     * Prepare an environment before launching an app
-     */
-    suspend fun prepareEnvironment(environmentId: String) = withContext(Dispatchers.IO) {
-        Log.d(TAG, "Preparing environment: $environmentId")
-        
-        val environmentDir = getEnvironmentDir(environmentId)
-        
-        // Ensure environment directories exist
-        if (!environmentDir.exists()) {
-            Log.w(TAG, "Environment directory doesn't exist, creating it: $environmentId")
-            createEnvironmentDirectories(environmentDir)
-            initializeEnvironmentSecurity(environmentId)
-        }
-        
-        // Ensure runtime directories exist
-        val runtimeDir = File(environmentDir, "runtime")
-        if (!runtimeDir.exists()) {
-            runtimeDir.mkdirs()
-        }
-        
-        // Create a token file to validate the environment is active
-        File(runtimeDir, "active").writeText(System.currentTimeMillis().toString())
-        
-        // Set up storage redirection
-        setupStorageRedirection(environmentId)
-    }
-    
-    /**
-     * Remove an environment and clean up its resources
-     */
-    suspend fun removeEnvironment(environmentId: String) = withContext(Dispatchers.IO) {
-        Log.d(TAG, "Removing environment: $environmentId")
-        
-        val environmentDir = getEnvironmentDir(environmentId)
-        
-        // Delete environment directory and all its contents
-        if (environmentDir.exists()) {
-            environmentDir.deleteRecursively()
-        }
-        
-        // Remove from preferences
-        // First, find the clone ID that maps to this environment ID
-        val allEntries = envPrefs.all
-        val cloneIdToRemove = allEntries.entries.find { 
-            it.value == environmentId 
-        }?.key
-        
-        // Remove the mapping and metadata
-        envPrefs.edit().apply {
-            cloneIdToRemove?.let { remove(it) }
-            remove("${environmentId}_created")
-            remove("${environmentId}_security_token")
-        }.apply()
-    }
-    
-    /**
-     * Get app-specific data directory in the isolated environment
-     */
-    fun getAppDataDir(environmentId: String, packageName: String): File {
-        val dir = File(getEnvironmentDir(environmentId), "data/$packageName")
-        if (!dir.exists()) {
-            dir.mkdirs()
-        }
-        return dir
-    }
-    
-    /**
-     * Get directory for shared files between all apps in an environment
-     */
-    fun getSharedDir(environmentId: String): File {
-        val dir = File(getEnvironmentDir(environmentId), "shared")
-        if (!dir.exists()) {
-            dir.mkdirs()
-        }
-        return dir
-    }
-    
-    /**
-     * Get environment base directory
-     */
-    private fun getEnvironmentDir(environmentId: String): File {
-        return File(environmentsBaseDir, environmentId)
-    }
-    
-    /**
-     * Create standard directory structure for an environment
-     */
-    private fun createEnvironmentDirectories(environmentDir: File) {
-        // Create standard Android data directories
-        val standardDirs = listOf(
-            "data",
-            "shared_prefs",
-            "databases",
-            "cache",
-            "shared",  // Shared between apps in this environment
-            "runtime", // Runtime state information
-            "media",   // Media files
-            "config"   // Environment configuration
-        )
-        
-        standardDirs.forEach { dirName ->
-            File(environmentDir, dirName).apply {
-                if (!exists()) mkdirs()
-            }
-        }
-        
-        // Create .nomedia file to prevent media scanner from indexing
-        File(environmentDir, ".nomedia").createNewFile()
-    }
-    
-    /**
-     * Initialize security for the environment
-     */
-    private fun initializeEnvironmentSecurity(environmentId: String) {
-        // Generate a secure random token for this environment
-        val securityTokenBytes = ByteArray(32)
-        secureRandom.nextBytes(securityTokenBytes)
-        val securityToken = securityTokenBytes.joinToString("") { 
-            "%02x".format(it) 
-        }
-        
-        // Store the security token
-        envPrefs.edit()
-            .putString("${environmentId}_security_token", securityToken)
-            .apply()
-        
-        // Create a security config file in the environment
-        val configDir = File(getEnvironmentDir(environmentId), "config")
-        configDir.mkdirs()
-        
-        // Store some security information in an encrypted file
         try {
-            val masterKey = MasterKey.Builder(context)
-                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-                .build()
-                
-            val securityFile = File(configDir, "security.dat")
-            val encryptedFile = EncryptedFile.Builder(
-                context,
-                securityFile,
-                masterKey,
-                EncryptedFile.FileEncryptionScheme.AES256_GCM_HKDF_4KB
-            ).build()
-            
-            encryptedFile.openFileOutput().use { outputStream ->
-                val securityData = """
-                    environment_id=$environmentId
-                    created=${System.currentTimeMillis()}
-                    device=${Build.MODEL}
-                    android=${Build.VERSION.RELEASE}
-                    sdk=${Build.VERSION.SDK_INT}
-                """.trimIndent().toByteArray()
-                
-                outputStream.write(securityData)
-            }
+            val environmentId = environmentsPrefs.getString(cloneId, null)
+            Log.d(TAG, "Environment ID for clone $cloneId: $environmentId")
+            return environmentId
         } catch (e: Exception) {
-            Log.e(TAG, "Error creating security file", e)
-            // Fallback to unencrypted file if encryption fails
-            File(configDir, "security.conf").writeText(
-                "environment_id=$environmentId\ncreated=${System.currentTimeMillis()}"
-            )
+            Log.e(TAG, "Error getting environment ID for clone", e)
+            return null
         }
     }
-    
+
     /**
-     * Setup storage redirection for this environment
+     * Gets the data directory for an environment
+     *
+     * @param environmentId The ID of the environment
+     * @return The data directory, or null if not found
      */
-    private fun setupStorageRedirection(environmentId: String) {
-        // Create virtual storage locations that will be used 
-        // when intercepting file system operations
-        val storageDir = File(getEnvironmentDir(environmentId), "storage")
-        storageDir.mkdirs()
-        
-        // Create standard storage directories
-        File(storageDir, "external").mkdirs() // Redirected external storage
-        File(storageDir, "downloads").mkdirs() // Redirected downloads
-        File(storageDir, "dcim").mkdirs() // Redirected camera
-        File(storageDir, "pictures").mkdirs() // Redirected pictures
-        File(storageDir, "movies").mkdirs() // Redirected videos
-        File(storageDir, "music").mkdirs() // Redirected music
-        
-        // Create a symbolic metadata file for the storage redirection system
-        val metadataFile = File(storageDir, "storage_redirect.json")
-        metadataFile.writeText("""
-            {
-                "version": 1,
-                "environmentId": "$environmentId",
-                "created": ${System.currentTimeMillis()},
-                "redirects": {
-                    "EXTERNAL_STORAGE": "external",
-                    "DOWNLOAD": "downloads",
-                    "DCIM": "dcim",
-                    "PICTURES": "pictures",
-                    "MOVIES": "movies",
-                    "MUSIC": "music"
-                }
+    fun getEnvironmentDataDir(environmentId: String): File? {
+        try {
+            val envPath = getEnvironmentPath(environmentId) ?: return null
+            val dataDir = File(envPath, "data")
+            
+            if (!dataDir.exists()) {
+                dataDir.mkdirs()
             }
-        """.trimIndent())
-    }
-    
-    /**
-     * Get list of all environments
-     */
-    fun getAllEnvironments(): List<EnvironmentInfo> {
-        val environments = mutableListOf<EnvironmentInfo>()
-        
-        envPrefs.all.forEach { (key, value) ->
-            if (!key.contains("_") && value is String) {
-                // This is a clone ID -> environment ID mapping
-                val cloneId = key
-                val environmentId = value
-                val createdTime = envPrefs.getLong("${environmentId}_created", 0)
-                
-                // Check if the directory exists
-                val envDir = getEnvironmentDir(environmentId)
-                if (envDir.exists()) {
-                    environments.add(
-                        EnvironmentInfo(
-                            cloneId = cloneId,
-                            environmentId = environmentId,
-                            createdTime = createdTime,
-                            size = calculateDirSize(envDir)
-                        )
-                    )
-                } else {
-                    // Clean up orphaned preferences
-                    envPrefs.edit().remove(cloneId).apply()
-                }
-            }
+            
+            return dataDir
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting environment data directory", e)
+            return null
         }
-        
-        return environments
     }
-    
+
     /**
-     * Calculate directory size recursively
+     * Gets the cache directory for an environment
+     *
+     * @param environmentId The ID of the environment
+     * @return The cache directory, or null if not found
      */
-    private fun calculateDirSize(dir: File): Long {
-        var size: Long = 0
-        
-        dir.listFiles()?.forEach { file ->
-            size += if (file.isDirectory) {
-                calculateDirSize(file)
-            } else {
-                file.length()
+    fun getEnvironmentCacheDir(environmentId: String): File? {
+        try {
+            val envPath = getEnvironmentPath(environmentId) ?: return null
+            val cacheDir = File(envPath, "cache")
+            
+            if (!cacheDir.exists()) {
+                cacheDir.mkdirs()
             }
+            
+            return cacheDir
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting environment cache directory", e)
+            return null
         }
-        
-        return size
     }
-    
+
     /**
-     * Data class representing environment information
+     * Gets the files directory for an environment
+     *
+     * @param environmentId The ID of the environment
+     * @return The files directory, or null if not found
      */
-    data class EnvironmentInfo(
-        val cloneId: String,
-        val environmentId: String, 
-        val createdTime: Long,
-        val size: Long
-    )
+    fun getEnvironmentFilesDir(environmentId: String): File? {
+        try {
+            val envPath = getEnvironmentPath(environmentId) ?: return null
+            val filesDir = File(envPath, "files")
+            
+            if (!filesDir.exists()) {
+                filesDir.mkdirs()
+            }
+            
+            return filesDir
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting environment files directory", e)
+            return null
+        }
+    }
+
+    /**
+     * Gets the databases directory for an environment
+     *
+     * @param environmentId The ID of the environment
+     * @return The databases directory, or null if not found
+     */
+    fun getEnvironmentDatabasesDir(environmentId: String): File? {
+        try {
+            val envPath = getEnvironmentPath(environmentId) ?: return null
+            val databasesDir = File(envPath, "databases")
+            
+            if (!databasesDir.exists()) {
+                databasesDir.mkdirs()
+            }
+            
+            return databasesDir
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting environment databases directory", e)
+            return null
+        }
+    }
+
+    /**
+     * Gets the shared preferences directory for an environment
+     *
+     * @param environmentId The ID of the environment
+     * @return The shared preferences directory, or null if not found
+     */
+    fun getEnvironmentSharedPrefsDir(environmentId: String): File? {
+        try {
+            val envPath = getEnvironmentPath(environmentId) ?: return null
+            val sharedPrefsDir = File(envPath, "shared_prefs")
+            
+            if (!sharedPrefsDir.exists()) {
+                sharedPrefsDir.mkdirs()
+            }
+            
+            return sharedPrefsDir
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting environment shared preferences directory", e)
+            return null
+        }
+    }
 }
