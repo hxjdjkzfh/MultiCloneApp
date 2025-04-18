@@ -1,127 +1,89 @@
 package com.multiclone.app.viewmodel
 
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.multiclone.app.data.model.CloneInfo
-import com.multiclone.app.data.repository.CloneRepository
+import com.multiclone.app.domain.usecase.DeleteCloneUseCase
+import com.multiclone.app.domain.usecase.GetClonesUseCase
 import com.multiclone.app.domain.usecase.LaunchCloneUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
- * ViewModel for the HomeScreen (ClonesListScreen)
+ * ViewModel for the clones list screens
  */
 @HiltViewModel
 class ClonesListViewModel @Inject constructor(
-    private val cloneRepository: CloneRepository,
-    private val launchCloneUseCase: LaunchCloneUseCase
+    private val getClonesUseCase: GetClonesUseCase,
+    private val launchCloneUseCase: LaunchCloneUseCase,
+    private val deleteCloneUseCase: DeleteCloneUseCase
 ) : ViewModel() {
-
-    private val _uiState = MutableStateFlow(ClonesListUiState())
-    val uiState: StateFlow<ClonesListUiState> = _uiState.asStateFlow()
-
-    init {
-        loadClones()
-    }
-
+    
+    private val _allClones = MutableStateFlow<List<CloneInfo>>(emptyList())
+    val allClones: StateFlow<List<CloneInfo>> = _allClones.asStateFlow()
+    
+    private val _recentClones = MutableStateFlow<List<CloneInfo>>(emptyList())
+    val recentClones: StateFlow<List<CloneInfo>> = _recentClones.asStateFlow()
+    
+    private val _isLoading = MutableStateFlow(false)
+    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+    
     /**
-     * Loads the list of clones
+     * Load all clones
      */
-    fun loadClones() {
+    fun loadAllClones() {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, error = null) }
+            _isLoading.value = true
             
-            try {
-                cloneRepository.getAllClones().collect { clones ->
-                    _uiState.update { 
-                        it.copy(
-                            isLoading = false,
-                            clones = clones.sortedByDescending { clone -> clone.lastUsedTime },
-                            error = null
-                        )
-                    }
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error loading clones", e)
-                _uiState.update { 
-                    it.copy(
-                        isLoading = false,
-                        error = e.message ?: "Unknown error occurred"
-                    )
-                }
+            getClonesUseCase().collectLatest { clones ->
+                _allClones.value = clones
+                _isLoading.value = false
             }
         }
     }
-
+    
     /**
-     * Launches a cloned app
+     * Load recent clones (limited by count)
+     */
+    fun loadRecentClones(count: Int) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            
+            getClonesUseCase().collectLatest { clones ->
+                _recentClones.value = clones
+                    .sortedByDescending { it.lastUsedTimestamp }
+                    .take(count)
+                _isLoading.value = false
+            }
+        }
+    }
+    
+    /**
+     * Launch a clone by its ID
      */
     fun launchClone(cloneId: String) {
         viewModelScope.launch {
-            try {
-                val result = launchCloneUseCase(cloneId)
-                
-                if (result.isFailure) {
-                    val exception = result.exceptionOrNull()
-                    Log.e(TAG, "Error launching clone", exception)
-                    _uiState.update { 
-                        it.copy(error = exception?.message ?: "Failed to launch clone")
-                    }
-                }
-                
-                // Refresh the list to update last used time
-                loadClones()
-            } catch (e: Exception) {
-                Log.e(TAG, "Error launching clone", e)
-                _uiState.update { 
-                    it.copy(error = e.message ?: "Unknown error occurred")
-                }
-            }
+            launchCloneUseCase(cloneId)
         }
     }
-
+    
     /**
-     * Deletes a cloned app
+     * Delete a clone by its ID
      */
     fun deleteClone(cloneId: String) {
         viewModelScope.launch {
-            try {
-                val success = cloneRepository.deleteClone(cloneId)
-                
-                if (!success) {
-                    _uiState.update { 
-                        it.copy(error = "Failed to delete clone")
-                    }
-                    return@launch
-                }
-                
-                // Refresh the list
-                loadClones()
-            } catch (e: Exception) {
-                Log.e(TAG, "Error deleting clone", e)
-                _uiState.update { 
-                    it.copy(error = e.message ?: "Unknown error occurred")
-                }
-            }
+            _isLoading.value = true
+            
+            deleteCloneUseCase(cloneId)
+            
+            // Refresh lists after deletion
+            loadAllClones()
+            loadRecentClones(5)
         }
     }
-
-    companion object {
-        private const val TAG = "ClonesListViewModel"
-    }
 }
-
-/**
- * UI state for the ClonesListScreen
- */
-data class ClonesListUiState(
-    val isLoading: Boolean = false,
-    val clones: List<CloneInfo> = emptyList(),
-    val error: String? = null
-)

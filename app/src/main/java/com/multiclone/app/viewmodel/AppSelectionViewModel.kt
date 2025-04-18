@@ -8,91 +8,57 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
- * ViewModel for the AppSelectionScreen
+ * ViewModel for the app selection screen
  */
 @HiltViewModel
 class AppSelectionViewModel @Inject constructor(
     private val getInstalledAppsUseCase: GetInstalledAppsUseCase
 ) : ViewModel() {
-
-    private val _uiState = MutableStateFlow(AppSelectionUiState())
-    val uiState: StateFlow<AppSelectionUiState> = _uiState.asStateFlow()
-
+    
+    private val _appsList = MutableStateFlow<List<AppInfo>>(emptyList())
+    val appsList: StateFlow<List<AppInfo>> = _appsList.asStateFlow()
+    
+    private val _filteredApps = MutableStateFlow<List<AppInfo>>(emptyList())
+    val filteredApps: StateFlow<List<AppInfo>> = _filteredApps.asStateFlow()
+    
+    private val _isLoading = MutableStateFlow(false)
+    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+    
     /**
-     * Loads the list of installed apps that can be cloned
+     * Load all installed apps
      */
     fun loadInstalledApps() {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, error = null) }
+            _isLoading.value = true
             
-            try {
-                val apps = getInstalledAppsUseCase()
-                _uiState.update { 
-                    it.copy(
-                        isLoading = false,
-                        apps = apps.sortedBy { app -> app.appName },
-                        error = null
-                    )
-                }
-            } catch (e: Exception) {
-                _uiState.update { 
-                    it.copy(
-                        isLoading = false,
-                        error = e.message ?: "Unknown error occurred"
-                    )
-                }
+            getInstalledAppsUseCase(includeSystemApps = false).collectLatest { apps ->
+                _appsList.value = apps
+                _filteredApps.value = apps
+                _isLoading.value = false
             }
         }
     }
-
+    
     /**
-     * Filters the list of apps based on a search query
+     * Filter apps based on search query
      */
     fun filterApps(query: String) {
+        if (query.isBlank()) {
+            _filteredApps.value = _appsList.value
+            return
+        }
+        
         viewModelScope.launch {
-            if (query.isBlank()) {
-                loadInstalledApps()
-                return@launch
-            }
-            
-            _uiState.update { it.copy(isLoading = true) }
-            
-            try {
-                val allApps = getInstalledAppsUseCase()
-                val filteredApps = allApps.filter { app ->
-                    app.appName.contains(query, ignoreCase = true) ||
-                    app.packageName.contains(query, ignoreCase = true)
-                }.sortedBy { it.appName }
-                
-                _uiState.update { 
-                    it.copy(
-                        isLoading = false,
-                        apps = filteredApps,
-                        error = null
-                    )
-                }
-            } catch (e: Exception) {
-                _uiState.update { 
-                    it.copy(
-                        isLoading = false,
-                        error = e.message ?: "Unknown error occurred"
-                    )
-                }
+            val lowercaseQuery = query.lowercase()
+            _filteredApps.value = _appsList.value.filter { app ->
+                app.appName.lowercase().contains(lowercaseQuery) ||
+                app.packageName.lowercase().contains(lowercaseQuery)
             }
         }
     }
 }
-
-/**
- * UI state for the AppSelectionScreen
- */
-data class AppSelectionUiState(
-    val isLoading: Boolean = false,
-    val apps: List<AppInfo> = emptyList(),
-    val error: String? = null
-)
