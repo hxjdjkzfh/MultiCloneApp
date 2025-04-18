@@ -1,56 +1,43 @@
 #!/bin/bash
 
-# Define colors for output
-GREEN='\033[0;32m'
-YELLOW='\033[0;33m'
-RED='\033[0;31m'
-NC='\033[0m' # No Color
+# This script configures GitHub credentials and pushes to the repo
+# Usage: ./setup-github-and-push.sh <github_token> <repo_url> <commit_message>
 
-echo -e "${YELLOW}MultiClone App GitHub Setup Script${NC}"
-echo "This script will set up a GitHub repository and push the code."
-echo
-
-# Check if git is installed
-if ! command -v git &> /dev/null; then
-    echo -e "${RED}Error: Git is not installed. Please install git first.${NC}"
+# Check if all arguments are provided
+if [ "$#" -lt 3 ]; then
+    echo "Usage: $0 <github_token> <repo_url> <commit_message>"
+    echo "Example: $0 ghp_123456789abcdef https://github.com/username/repo.git \"Initial commit\""
     exit 1
 fi
 
-# Get GitHub username
-read -p "Enter your GitHub username: " GITHUB_USERNAME
+TOKEN=$1
+REPO_URL=$2
+COMMIT_MSG=$3
 
-# Create a new repository on GitHub
-echo -e "\n${YELLOW}Creating a new repository on GitHub...${NC}"
-read -p "Enter a name for your repository (default: multiclone-app): " REPO_NAME
-REPO_NAME=${REPO_NAME:-multiclone-app}
+# Extract the repo parts from URL
+REPO_URL_WITH_TOKEN=${REPO_URL/https:\/\//https:\/\/$TOKEN@}
 
-echo -e "\n${YELLOW}Initializing local git repository...${NC}"
+# Configure git
+git config --global user.name "Automated Push"
+git config --global user.email "automated@example.com"
+
+# Initialize repository if not already done
 git init
-git add .
-git commit -m "Initial commit for MultiClone App"
 
-# Add GitHub as remote and push
-echo -e "\n${YELLOW}Adding GitHub as remote and pushing...${NC}"
-git remote add origin https://github.com/$GITHUB_USERNAME/$REPO_NAME.git
-git branch -M main
+# Add all files
+git add .
+
+# Commit changes
+git commit -m "$COMMIT_MSG"
+
+# Add remote if it doesn't exist, or update it if it does
+if git remote | grep -q "^origin$"; then
+    git remote set-url origin "$REPO_URL_WITH_TOKEN"
+else
+    git remote add origin "$REPO_URL_WITH_TOKEN"
+fi
+
+# Push to GitHub
 git push -u origin main
 
-echo -e "\n${GREEN}Code has been pushed to GitHub!${NC}"
-echo -e "Repository URL: https://github.com/$GITHUB_USERNAME/$REPO_NAME"
-
-# Instructions for setting up GitHub Secrets for signing
-echo -e "\n${YELLOW}To enable APK signing in GitHub Actions, add the following secrets in your repository:${NC}"
-echo -e "1. ${GREEN}SIGNING_KEY${NC} - Base64-encoded keystore file"
-echo -e "2. ${GREEN}SIGNING_KEY_ALIAS${NC} - Keystore alias"
-echo -e "3. ${GREEN}SIGNING_STORE_PASSWORD${NC} - Keystore password"
-echo -e "4. ${GREEN}SIGNING_KEY_PASSWORD${NC} - Key password"
-
-echo -e "\n${YELLOW}Instructions for generating a keystore:${NC}"
-echo "keytool -genkey -v -keystore multiclone.keystore -alias multiclone -keyalg RSA -keysize 2048 -validity 10000"
-
-echo -e "\n${YELLOW}To convert the keystore to base64 for GitHub secrets:${NC}"
-echo "openssl base64 < multiclone.keystore | tr -d '\n' | tee multiclone.keystore.base64.txt"
-
-echo -e "\n${GREEN}Setup complete!${NC}"
-echo "The GitHub Actions workflow will build and sign your APK when you push changes to main."
-echo "Find built APKs in the 'Actions' tab of your GitHub repository."
+echo "✅ Repository pushed successfully to $REPO_URL"
