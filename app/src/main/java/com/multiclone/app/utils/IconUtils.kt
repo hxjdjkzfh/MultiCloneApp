@@ -1,122 +1,135 @@
 package com.multiclone.app.utils
 
 import android.content.Context
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.graphics.Canvas
-import android.graphics.Matrix
+import android.graphics.Color
 import android.graphics.Paint
-import android.graphics.PorterDuff
-import android.graphics.PorterDuffXfermode
+import android.graphics.Rect
 import android.graphics.RectF
-import android.net.Uri
-import android.util.Log
-import java.io.File
-import java.io.FileOutputStream
-import java.io.InputStream
+import android.graphics.Typeface
+import android.graphics.drawable.BitmapDrawable
+import android.graphics.drawable.Drawable
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import javax.inject.Inject
+import javax.inject.Singleton
+import kotlin.math.min
 
-object IconUtils {
-    private const val TAG = "IconUtils"
+/**
+ * Utility class for handling app icons
+ */
+@Singleton
+class IconUtils @Inject constructor(
+    @ApplicationContext private val context: Context
+) {
+    private val packageManager = context.packageManager
     
     /**
-     * Load a bitmap from a file.
-     *
-     * @param file The file to load the bitmap from.
-     * @return The loaded bitmap, or null if loading failed.
+     * Get an app's icon as a Bitmap
      */
-    fun loadBitmapFromFile(file: File): Bitmap? {
-        return try {
-            BitmapFactory.decodeFile(file.absolutePath)
+    suspend fun getAppIcon(packageName: String): Bitmap? = withContext(Dispatchers.IO) {
+        try {
+            val appInfo = packageManager.getApplicationInfo(packageName, 0)
+            val drawable = packageManager.getApplicationIcon(appInfo)
+            drawableToBitmap(drawable)
         } catch (e: Exception) {
-            Log.e(TAG, "Error loading bitmap from file", e)
+            e.printStackTrace()
             null
         }
     }
     
     /**
-     * Save a bitmap to a file.
-     *
-     * @param bitmap The bitmap to save.
-     * @param file The file to save the bitmap to.
-     * @return True if the bitmap was saved successfully, false otherwise.
+     * Draw a badge on an icon
+     * @param icon The original icon bitmap
+     * @param badge The badge text to draw
      */
-    fun saveBitmapToFile(bitmap: Bitmap, file: File): Boolean {
-        return try {
-            FileOutputStream(file).use { out ->
-                bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
-            }
-            true
-        } catch (e: Exception) {
-            Log.e(TAG, "Error saving bitmap to file", e)
-            false
+    fun drawBadge(icon: Bitmap, badge: String): Bitmap {
+        val badgeSize = icon.width / 2.5f
+        val badgePosition = RectF(
+            icon.width - badgeSize,
+            icon.height - badgeSize,
+            icon.width.toFloat(),
+            icon.height.toFloat()
+        )
+        
+        val result = Bitmap.createBitmap(icon.width, icon.height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(result)
+        
+        // Draw the original icon
+        canvas.drawBitmap(icon, 0f, 0f, null)
+        
+        // Draw badge background
+        val bgPaint = Paint().apply {
+            color = Color.RED
+            isAntiAlias = true
         }
+        canvas.drawOval(badgePosition, bgPaint)
+        
+        // Draw badge text
+        val textPaint = Paint().apply {
+            color = Color.WHITE
+            textSize = badgeSize * 0.6f
+            typeface = Typeface.DEFAULT_BOLD
+            textAlign = Paint.Align.CENTER
+            isAntiAlias = true
+        }
+        
+        val textBounds = Rect()
+        textPaint.getTextBounds(badge, 0, badge.length, textBounds)
+        
+        val textX = badgePosition.centerX()
+        val textY = badgePosition.centerY() + (textBounds.height() / 2)
+        
+        canvas.drawText(badge, textX, textY, textPaint)
+        
+        return result
     }
     
     /**
-     * Load a bitmap from a content URI.
-     *
-     * @param uri The URI to load the bitmap from.
-     * @param context The application context.
-     * @return The loaded bitmap, or null if loading failed.
+     * Create a circular icon from an app icon
      */
-    fun loadBitmapFromUri(uri: Uri, context: Context): Bitmap? {
-        return try {
-            val inputStream: InputStream? = context.contentResolver.openInputStream(uri)
-            inputStream?.use { stream ->
-                BitmapFactory.decodeStream(stream)
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error loading bitmap from URI", e)
-            null
-        }
-    }
-    
-    /**
-     * Create an adaptive icon badge for the shortcut.
-     *
-     * @param icon The icon bitmap to use.
-     * @return A new bitmap with the adaptive icon badge.
-     */
-    fun createIconAdaptiveBadge(icon: Bitmap): Bitmap {
-        val size = Math.max(icon.width, icon.height)
+    fun createCircularIcon(icon: Bitmap, size: Int): Bitmap {
         val output = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(output)
         
-        // Scale the icon to fit
-        val matrix = Matrix()
-        val scale = size.toFloat() / Math.min(icon.width, icon.height)
-        matrix.setScale(scale, scale)
+        val paint = Paint().apply {
+            isAntiAlias = true
+            color = Color.BLACK
+        }
         
-        // Center the icon
-        val dx = (size - icon.width * scale) / 2f
-        val dy = (size - icon.height * scale) / 2f
-        matrix.postTranslate(dx, dy)
+        val rect = Rect(0, 0, size, size)
+        val rectF = RectF(rect)
         
-        // Create a rounded rect for the icon
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-        val rect = RectF(0f, 0f, size.toFloat(), size.toFloat())
-        canvas.drawRoundRect(rect, size / 5f, size / 5f, paint)
+        canvas.drawOval(rectF, paint)
         
-        // Apply mask
-        paint.xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_IN)
-        canvas.drawBitmap(icon, matrix, paint)
+        paint.xfermode = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.SRC_IN)
+        
+        // Scale the original icon to fit
+        val scaledIcon = Bitmap.createScaledBitmap(icon, size, size, true)
+        canvas.drawBitmap(scaledIcon, rect, rect, paint)
         
         return output
     }
     
     /**
-     * Resize a bitmap to a specific size.
-     *
-     * @param bitmap The bitmap to resize.
-     * @param width The target width.
-     * @param height The target height.
-     * @return The resized bitmap.
+     * Convert a drawable to a bitmap
      */
-    fun resizeBitmap(bitmap: Bitmap, width: Int, height: Int): Bitmap {
-        val scaleWidth = width.toFloat() / bitmap.width
-        val scaleHeight = height.toFloat() / bitmap.height
-        val matrix = Matrix()
-        matrix.postScale(scaleWidth, scaleHeight)
-        return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+    private fun drawableToBitmap(drawable: Drawable): Bitmap {
+        if (drawable is BitmapDrawable) {
+            return drawable.bitmap
+        }
+        
+        val width = drawable.intrinsicWidth.takeIf { it > 0 } ?: 128
+        val height = drawable.intrinsicHeight.takeIf { it > 0 } ?: 128
+        
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        drawable.setBounds(0, 0, canvas.width, canvas.height)
+        drawable.draw(canvas)
+        
+        return bitmap
     }
 }

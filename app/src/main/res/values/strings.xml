@@ -1,56 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">MultiClone</string>
-    
-    <!-- Home Screen -->
-    <string name="welcome_title">Welcome to MultiClone</string>
-    <string name="welcome_subtitle">Create isolated clones of your apps without root access</string>
-    <string name="create_new_clone">Create New Clone</string>
-    <string name="manage_clones">Manage Clones</string>
-    <string name="about">About</string>
-    
-    <!-- App Selection Screen -->
-    <string name="select_app_title">Select App to Clone</string>
-    <string name="search_apps">Search apps…</string>
-    <string name="no_apps_found">No apps found</string>
-    <string name="no_matching_apps">No matching apps found</string>
-    <string name="refreshing_apps">Refreshing apps…</string>
-    
-    <!-- Clone Configuration Screen -->
-    <string name="configure_clone_title">Configure Clone</string>
-    <string name="clone_name">Clone Name</string>
-    <string name="enter_clone_name">Enter clone name</string>
-    <string name="custom_icon">Custom Icon</string>
-    <string name="change_icon">Change Icon</string>
+    <string name="select_app_to_clone">Select App to Clone</string>
+    <string name="configure_clone">Configure Clone</string>
+    <string name="your_clones">Your Clones</string>
     <string name="create_clone">Create Clone</string>
-    <string name="creating_clone">Creating clone…</string>
-    
-    <!-- Clones List Screen -->
-    <string name="your_clones_title">Your Clones</string>
-    <string name="no_clones_yet">No Clones Yet</string>
-    <string name="create_first_clone">Create your first app clone by tapping the + button</string>
+    <string name="clone_created">Clone Created Successfully</string>
+    <string name="clone_failed">Failed to Create Clone</string>
+    <string name="clone_name_hint">Clone Name</string>
+    <string name="create_shortcut">Create Shortcut</string>
+    <string name="shortcut_created">Shortcut Created</string>
+    <string name="shortcut_failed">Failed to Create Shortcut</string>
+    <string name="no_apps_found">No applications found</string>
+    <string name="no_clones">You don\'t have any clones yet</string>
+    <string name="search_apps">Search applications…</string>
+    <string name="permissions_required">Required Permissions</string>
+    <string name="grant_permissions">Grant Permissions</string>
+    <string name="permissions_denied">Permissions were denied. Some features may not work properly.</string>
+    <string name="installation_in_progress">Installation in progress…</string>
+    <string name="installation_failed">Installation failed</string>
     <string name="delete_clone">Delete Clone</string>
-    <string name="delete_clone_confirmation">Are you sure you want to delete %s?</string>
-    <string name="delete">Delete</string>
-    <string name="cancel">Cancel</string>
-    
-    <!-- Error Messages -->
-    <string name="error_title">Error</string>
-    <string name="error_loading_apps">Failed to load installed apps</string>
-    <string name="error_creating_clone">Failed to create clone</string>
-    <string name="error_launching_clone">Failed to launch clone</string>
-    <string name="error_deleting_clone">Failed to delete clone</string>
-    <string name="error_shortcut_creation">Failed to create shortcut</string>
-    <string name="error_no_clone_info">No clone information provided</string>
-    <string name="error_unexpected">An unexpected error occurred</string>
-    
-    <!-- Success Messages -->
-    <string name="clone_created">Clone created successfully</string>
     <string name="clone_deleted">Clone deleted successfully</string>
-    
-    <!-- Misc -->
-    <string name="ok">OK</string>
-    <string name="original">Original: %s</string>
-    <string name="package_name">Package: %s</string>
-    <string name="created_on">Created on: %s</string>
-    <string name="app_size">Size: %s MB</string>
+    <string name="launch_app">Launch App</string>
 </resources>

@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "MultiClone"
+rootProject.name = "MultiCloneApp"
 include(":app")

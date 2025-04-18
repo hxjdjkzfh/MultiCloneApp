@@ -1,144 +1,83 @@
 package com.multiclone.app.domain.virtualization
 
 import android.content.Context
-import android.util.Log
+import android.content.pm.PackageManager
+import android.os.Environment
+import android.os.UserManager
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Manages isolated environments for cloned applications.
+ * Manages creation and lifecycle of isolated environments for app clones
  */
 @Singleton
 class CloneEnvironment @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
-    companion object {
-        private const val TAG = "CloneEnvironment"
+    private val userManager = context.getSystemService(Context.USER_SERVICE) as UserManager
+    private val packageManager = context.packageManager
+    
+    /**
+     * Create a new isolated environment
+     * @return The ID of the created environment
+     */
+    suspend fun createEnvironment(cloneId: String): String = withContext(Dispatchers.IO) {
+        // Create a new directory to store the environment data
+        val environmentDir = File(context.filesDir, "environments/$cloneId")
+        environmentDir.mkdirs()
+        
+        // Create data directories for the environment
+        createEnvironmentDirectories(environmentDir)
+        
+        // Return the environment ID (same as clone ID for simplicity)
+        cloneId
     }
     
     /**
-     * Create an isolated environment for a clone.
-     *
-     * @param cloneId The ID for the clone.
-     * @return The directory for the clone environment if created successfully, null otherwise.
+     * Prepare an environment before launching an app
      */
-    fun createCloneEnvironment(cloneId: String): File? {
-        try {
-            Log.d(TAG, "Creating clone environment for $cloneId")
-            
-            // Create base directory for clones
-            val baseDir = File(context.filesDir, "virtual_environments")
-            if (!baseDir.exists()) {
-                baseDir.mkdirs()
-            }
-            
-            // Create directory for this specific clone
-            val cloneDir = File(baseDir, cloneId)
-            if (cloneDir.exists()) {
-                // Clean up existing environment
-                cloneDir.deleteRecursively()
-            }
-            cloneDir.mkdirs()
-            
-            // Create subdirectories for the virtual environment
-            createEnvironmentStructure(cloneDir)
-            
-            return cloneDir
-        } catch (e: Exception) {
-            Log.e(TAG, "Error creating clone environment", e)
-            return null
+    suspend fun prepareEnvironment(environmentId: String) = withContext(Dispatchers.IO) {
+        val environmentDir = File(context.filesDir, "environments/$environmentId")
+        
+        // Ensure environment directories exist
+        if (!environmentDir.exists()) {
+            createEnvironmentDirectories(environmentDir)
         }
+        
+        // Set up any necessary environment variables or state
+        // This would involve setting Android environment properties or
+        // manipulating the isolated storage context
     }
     
     /**
-     * Prepare a clone environment for launching.
-     *
-     * @param cloneId The ID of the clone.
-     * @return True if prepared successfully, false otherwise.
+     * Remove an environment and clean up its resources
      */
-    fun prepareCloneForLaunch(cloneId: String): Boolean {
-        try {
-            Log.d(TAG, "Preparing clone environment for launch: $cloneId")
-            
-            // Get clone directory
-            val baseDir = File(context.filesDir, "virtual_environments")
-            val cloneDir = File(baseDir, cloneId)
-            
-            if (!cloneDir.exists()) {
-                Log.e(TAG, "Clone environment does not exist: $cloneId")
-                return false
-            }
-            
-            // In a real implementation, this would:
-            // 1. Set up virtual process environment
-            // 2. Configure necessary sandboxing
-            // 3. Prepare file access redirection
-            
-            // For this demonstration, we'll just update the last launch time
-            val launchMarker = File(cloneDir, "last_launch")
-            launchMarker.writeText(System.currentTimeMillis().toString())
-            
-            return true
-        } catch (e: Exception) {
-            Log.e(TAG, "Error preparing clone for launch", e)
-            return false
-        }
+    suspend fun removeEnvironment(environmentId: String) = withContext(Dispatchers.IO) {
+        val environmentDir = File(context.filesDir, "environments/$environmentId")
+        
+        // Delete environment directory and all its contents
+        environmentDir.deleteRecursively()
     }
     
     /**
-     * Remove a clone environment.
-     *
-     * @param cloneId The ID of the clone to remove.
-     * @return True if removed successfully, false otherwise.
+     * Get app-specific data directory in the isolated environment
      */
-    fun removeCloneEnvironment(cloneId: String): Boolean {
-        try {
-            Log.d(TAG, "Removing clone environment: $cloneId")
-            
-            val baseDir = File(context.filesDir, "virtual_environments")
-            val cloneDir = File(baseDir, cloneId)
-            
-            if (cloneDir.exists()) {
-                return cloneDir.deleteRecursively()
-            }
-            
-            return true
-        } catch (e: Exception) {
-            Log.e(TAG, "Error removing clone environment", e)
-            return false
-        }
+    fun getAppDataDir(environmentId: String, packageName: String): File {
+        return File(
+            File(context.filesDir, "environments/$environmentId"),
+            "data/$packageName"
+        )
     }
     
-    /**
-     * Create the directory structure for a clone environment.
-     *
-     * @param cloneDir The base directory for the clone.
-     */
-    private fun createEnvironmentStructure(cloneDir: File) {
-        try {
-            // Create standard directories that would be needed for a virtual environment
-            
-            // Directory for the APK files
-            File(cloneDir, "apk").mkdirs()
-            
-            // Directory for app data
-            File(cloneDir, "data").mkdirs()
-            
-            // Directory for shared prefs
-            File(cloneDir, "shared_prefs").mkdirs()
-            
-            // Directory for databases
-            File(cloneDir, "databases").mkdirs()
-            
-            // Directory for cache
-            File(cloneDir, "cache").mkdirs()
-            
-            // Directory for external storage redirection
-            File(cloneDir, "external").mkdirs()
-        } catch (e: Exception) {
-            Log.e(TAG, "Error creating environment structure", e)
-        }
+    private fun createEnvironmentDirectories(environmentDir: File) {
+        // Create standard Android data directories
+        File(environmentDir, "data").mkdirs()
+        File(environmentDir, "shared_prefs").mkdirs()
+        File(environmentDir, "databases").mkdirs()
+        File(environmentDir, "cache").mkdirs()
     }
 }

@@ -1,89 +1,93 @@
 package com.multiclone.app.domain.virtualization
 
 import android.content.Context
-import android.util.Log
+import android.content.pm.PackageInfo
+import android.content.pm.PackageManager
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.FileOutputStream
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Handles installation and uninstallation of cloned applications.
+ * Handles installation of cloned applications in their isolated environments
  */
 @Singleton
 class ClonedAppInstaller @Inject constructor(
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val cloneEnvironment: CloneEnvironment
 ) {
-    companion object {
-        private const val TAG = "ClonedAppInstaller"
-    }
+    private val packageManager = context.packageManager
     
     /**
-     * Install a cloned application.
-     *
-     * @param originalPackageName The package name of the original app.
-     * @param clonePackageName The package name to use for the clone.
-     * @param cloneDir The directory for the clone.
-     * @return True if installed successfully, false otherwise.
+     * Install an app in the virtual environment
      */
-    fun installClone(
-        originalPackageName: String,
-        clonePackageName: String,
-        cloneDir: File
-    ): Boolean {
+    suspend fun installApp(packageName: String, environmentId: String): Boolean = withContext(Dispatchers.IO) {
         try {
-            Log.d(TAG, "Installing clone: $originalPackageName as $clonePackageName")
+            // Extract the app's APK file
+            val appApkFile = extractAppApk(packageName)
             
-            // In a real implementation, this would involve:
-            // 1. Extracting the original APK
-            // 2. Modifying the manifest (package name, permissions, etc.)
-            // 3. Re-signing the APK
-            // 4. Installing into the virtual environment
+            // Create a directory for the app in the environment
+            val appDir = cloneEnvironment.getAppDataDir(environmentId, packageName)
+            appDir.mkdirs()
             
-            // For this demonstration, we'll just simulate the installation
+            // Copy the APK to the environment
+            val targetApk = File(appDir, "base.apk")
+            appApkFile.copyTo(targetApk, overwrite = true)
             
-            // Create installation marker file
-            val installMarker = File(cloneDir, "installed")
-            installMarker.writeText("$originalPackageName:$clonePackageName")
+            // Set up app data in the isolated environment
+            setupAppData(packageName, environmentId)
             
-            // Create virtual manifest file
-            val manifestFile = File(cloneDir, "AndroidManifest.xml")
-            val manifestContent = """
-                <?xml version="1.0" encoding="utf-8"?>
-                <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-                    package="$clonePackageName">
-                    <!-- This is a placeholder manifest for demonstration purposes -->
-                </manifest>
-            """.trimIndent()
-            manifestFile.writeText(manifestContent)
-            
-            return true
+            true
         } catch (e: Exception) {
-            Log.e(TAG, "Error installing clone", e)
-            return false
+            e.printStackTrace()
+            false
         }
     }
     
     /**
-     * Uninstall a cloned application.
-     *
-     * @param clonePackageName The package name of the clone to uninstall.
-     * @return True if uninstalled successfully, false otherwise.
+     * Extract an app's APK file to a temporary location
      */
-    fun uninstallClone(clonePackageName: String): Boolean {
+    private suspend fun extractAppApk(packageName: String): File = withContext(Dispatchers.IO) {
+        val packageInfo = packageManager.getPackageInfo(packageName, 0)
+        val sourceApk = File(packageInfo.applicationInfo.sourceDir)
+        
+        // Create a temporary file to store the APK
+        val tempApk = File(context.cacheDir, "$packageName.apk")
+        sourceApk.copyTo(tempApk, overwrite = true)
+        
+        tempApk
+    }
+    
+    /**
+     * Set up app data in the isolated environment
+     */
+    private suspend fun setupAppData(packageName: String, environmentId: String) = withContext(Dispatchers.IO) {
+        val appDataDir = cloneEnvironment.getAppDataDir(environmentId, packageName)
+        
+        // Create standard app data directories
+        File(appDataDir, "files").mkdirs()
+        File(appDataDir, "cache").mkdirs()
+        File(appDataDir, "shared_prefs").mkdirs()
+        File(appDataDir, "databases").mkdirs()
+        
+        // Create a .nomedia file to prevent media scanning
+        File(appDataDir, ".nomedia").createNewFile()
+    }
+    
+    /**
+     * Uninstall an app from the virtual environment
+     */
+    suspend fun uninstallApp(packageName: String, environmentId: String): Boolean = withContext(Dispatchers.IO) {
         try {
-            Log.d(TAG, "Uninstalling clone: $clonePackageName")
-            
-            // In a real implementation, this would:
-            // 1. Remove the app from the virtual environment
-            // 2. Clean up any system references
-            
-            // For this demonstration, there's no real app to uninstall
-            
-            return true
+            val appDir = cloneEnvironment.getAppDataDir(environmentId, packageName)
+            appDir.deleteRecursively()
+            true
         } catch (e: Exception) {
-            Log.e(TAG, "Error uninstalling clone", e)
-            return false
+            e.printStackTrace()
+            false
         }
     }
 }

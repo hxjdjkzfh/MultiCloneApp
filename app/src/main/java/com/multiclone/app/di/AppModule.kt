@@ -1,9 +1,8 @@
 package com.multiclone.app.di
 
 import android.content.Context
-import com.multiclone.app.domain.virtualization.CloneEnvironment
-import com.multiclone.app.domain.virtualization.ClonedAppInstaller
-import com.multiclone.app.domain.virtualization.VirtualAppEngine
+import com.multiclone.app.utils.IconUtils
+import com.multiclone.app.utils.PermissionUtils
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -11,32 +10,22 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 
+/**
+ * Hilt module to provide application-level dependencies
+ */
 @Module
 @InstallIn(SingletonComponent::class)
 object AppModule {
+    
     @Provides
     @Singleton
-    fun provideCloneEnvironment(
-        @ApplicationContext context: Context
-    ): CloneEnvironment {
-        return CloneEnvironment(context)
+    fun provideIconUtils(@ApplicationContext context: Context): IconUtils {
+        return IconUtils(context)
     }
     
     @Provides
     @Singleton
-    fun provideClonedAppInstaller(
-        @ApplicationContext context: Context
-    ): ClonedAppInstaller {
-        return ClonedAppInstaller(context)
-    }
-    
-    @Provides
-    @Singleton
-    fun provideVirtualAppEngine(
-        @ApplicationContext context: Context,
-        clonedAppInstaller: ClonedAppInstaller,
-        cloneEnvironment: CloneEnvironment
-    ): VirtualAppEngine {
-        return VirtualAppEngine(context, clonedAppInstaller, cloneEnvironment)
+    fun providePermissionUtils(@ApplicationContext context: Context): PermissionUtils {
+        return PermissionUtils(context)
     }
 }

@@ -7,6 +7,6 @@ import dagger.hilt.android.HiltAndroidApp
 class MultiCloneApplication : Application() {
     override fun onCreate() {
         super.onCreate()
-        // Initialize any application-wide components here
+        // Initialize any global components here
     }
 }

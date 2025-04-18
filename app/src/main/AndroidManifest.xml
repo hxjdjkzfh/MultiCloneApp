@@ -2,19 +2,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- Permissions for querying installed packages -->
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
         tools:ignore="QueryAllPackagesPermission" />
-    
-    <!-- Permission for reading external storage (for custom icon selection) -->
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" 
-        android:maxSdkVersion="32" />
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
-    
-    <!-- Permission for creating shortcuts -->
-    <uses-permission android:name="com.android.launcher.permission.INSTALL_SHORTCUT" />
-    <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
+    <uses-permission android:name="android.permission.INSTALL_PACKAGES" 
+        tools:ignore="ProtectedPermissions" />
 
     <application
         android:name=".MultiCloneApplication"
@@ -25,31 +18,29 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.MultiClone"
-        tools:targetApi="34">
+        android:theme="@style/Theme.MultiCloneApp"
+        tools:targetApi="31">
         
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:theme="@style/Theme.MultiClone">
+            android:theme="@style/Theme.MultiCloneApp">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
         
-        <!-- Clone Proxy Activity for launching cloned apps -->
         <activity
             android:name=".CloneProxyActivity"
             android:exported="true"
-            android:theme="@style/Theme.MultiClone.Transparent">
+            android:theme="@style/Theme.MultiCloneApp">
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
         
-        <!-- Provider for sharing files (for icons) -->
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -60,10 +51,6 @@
                 android:resource="@xml/file_paths" />
         </provider>
         
-        <!-- For full restore -->
-        <meta-data
-            android:name="android.allow.backup.full_restore"
-            android:value="true" />
     </application>
 
 </manifest>

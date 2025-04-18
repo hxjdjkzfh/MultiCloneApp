@@ -1,4 +1,4 @@
-modules = ["kotlin"]
+modules = ["kotlin", "java", "java-latest", "java-17"]
 
 [nix]
 channel = "stable-24_05"

@@ -4,15 +4,16 @@ import android.graphics.Bitmap
 import java.util.UUID
 
 /**
- * Data class representing a cloned application.
+ * Represents information about a cloned application
  */
 data class CloneInfo(
     val id: String = UUID.randomUUID().toString(),
-    val originalPackageName: String,
-    val originalAppName: String,
     val packageName: String,
-    val name: String,
-    val icon: Bitmap? = null,
-    val creationDate: String,
-    val lastLaunchDate: String? = null
+    val originalAppName: String,
+    val cloneName: String,
+    val customIcon: Bitmap? = null,
+    val creationTime: Long = System.currentTimeMillis(),
+    val lastUsedTime: Long = 0L,
+    val hasShortcut: Boolean = false,
+    val environmentId: String = id // Environment ID is same as clone ID for simplicity
 )

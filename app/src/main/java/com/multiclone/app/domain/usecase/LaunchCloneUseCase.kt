@@ -1,35 +1,45 @@
 package com.multiclone.app.domain.usecase
 
-import com.multiclone.app.data.model.CloneInfo
 import com.multiclone.app.data.repository.CloneRepository
+import com.multiclone.app.domain.virtualization.VirtualAppEngine
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 /**
- * UseCase for launching a cloned application.
+ * Use case for launching a cloned app
  */
 class LaunchCloneUseCase @Inject constructor(
-    private val cloneRepository: CloneRepository
+    private val cloneRepository: CloneRepository,
+    private val virtualAppEngine: VirtualAppEngine
 ) {
     /**
-     * Execute the use case to launch a clone.
-     *
-     * @param cloneInfo The CloneInfo of the clone to launch.
-     * @return A Result indicating success or failure.
+     * Launch a cloned app
+     * @param cloneId The ID of the clone to launch
+     * @return True if launch was successful, false otherwise
      */
-    suspend operator fun invoke(cloneInfo: CloneInfo): Result<Boolean> = withContext(Dispatchers.IO) {
+    suspend operator fun invoke(cloneId: String): Boolean = withContext(Dispatchers.IO) {
         try {
-            val isLaunched = cloneRepository.launchClone(cloneInfo)
+            // Get clone info
+            val cloneInfo = cloneRepository.getCloneById(cloneId) ?: return@withContext false
             
-            if (isLaunched) {
-                Result.success(true)
+            // Launch the app
+            val result = virtualAppEngine.launchApp(
+                cloneId = cloneId,
+                environmentId = cloneId, // Environment ID same as clone ID
+                packageName = cloneInfo.packageName
+            )
+            
+            // Update last used time if successful
+            if (result.isSuccess) {
+                cloneRepository.updateLastUsed(cloneId)
+                true
             } else {
-                Result.failure(Exception("Failed to launch clone"))
+                false
             }
         } catch (e: Exception) {
             e.printStackTrace()
-            Result.failure(e)
+            false
         }
     }
 }

@@ -1,87 +1,88 @@
 package com.multiclone.app.utils
 
+import android.Manifest
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
-import androidx.activity.result.ActivityResultLauncher
+import android.provider.Settings
+import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import dagger.hilt.android.qualifiers.ApplicationContext
+import javax.inject.Inject
+import javax.inject.Singleton
 
-object PermissionUtils {
+/**
+ * Utility class for handling runtime permissions
+ */
+@Singleton
+class PermissionUtils @Inject constructor(
+    @ApplicationContext private val context: Context
+) {
     /**
-     * Check if a permission is granted.
-     *
-     * @param context The application context.
-     * @param permission The permission to check.
-     * @return True if the permission is granted, false otherwise.
+     * Check if all required permissions are granted
      */
-    fun hasPermission(context: Context, permission: String): Boolean {
-        return ContextCompat.checkSelfPermission(
-            context,
-            permission
-        ) == PackageManager.PERMISSION_GRANTED
+    fun checkRequiredPermissions(): Boolean {
+        val requiredPermissions = getRequiredPermissions()
+        return requiredPermissions.all { permission ->
+            ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
+        }
     }
     
     /**
-     * Check if multiple permissions are granted.
-     *
-     * @param context The application context.
-     * @param permissions The permissions to check.
-     * @return True if all permissions are granted, false otherwise.
+     * Get list of required permissions based on Android version
      */
-    fun hasPermissions(context: Context, vararg permissions: String): Boolean {
-        return permissions.all { hasPermission(context, it) }
-    }
-    
-    /**
-     * Register a permission request launcher.
-     *
-     * @param activity The activity.
-     * @param onResult Callback for the result of the permission request.
-     * @return The permission request launcher.
-     */
-    fun registerPermissionLauncher(
-        activity: AppCompatActivity,
-        onResult: (Boolean) -> Unit
-    ): ActivityResultLauncher<String> {
-        return activity.registerForActivityResult(
-            ActivityResultContracts.RequestPermission(),
-            onResult
+    fun getRequiredPermissions(): List<String> {
+        val basePermissions = mutableListOf(
+            Manifest.permission.READ_EXTERNAL_STORAGE,
+            Manifest.permission.WRITE_EXTERNAL_STORAGE
         )
-    }
-    
-    /**
-     * Register a multiple permissions request launcher.
-     *
-     * @param activity The activity.
-     * @param onResult Callback for the result of the permission request.
-     * @return The permission request launcher.
-     */
-    fun registerMultiplePermissionsLauncher(
-        activity: AppCompatActivity,
-        onResult: (Map<String, Boolean>) -> Unit
-    ): ActivityResultLauncher<Array<String>> {
-        return activity.registerForActivityResult(
-            ActivityResultContracts.RequestMultiplePermissions(),
-            onResult
-        )
-    }
-    
-    /**
-     * Check if the app can create shortcuts.
-     *
-     * @param context The application context.
-     * @return True if the app can create shortcuts, false otherwise.
-     */
-    fun canCreateShortcuts(context: Context): Boolean {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val shortcutManager = context.getSystemService(Context.SHORTCUT_SERVICE) as android.content.pm.ShortcutManager
-            return shortcutManager.isRequestPinShortcutSupported
+        
+        // Add POST_NOTIFICATIONS permission for Android 13+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            basePermissions.add(Manifest.permission.POST_NOTIFICATIONS)
         }
         
-        // For pre-Oreo devices, we assume shortcuts can be created
-        // This may not be accurate for all launcher apps
-        return true
+        // Add QUERY_ALL_PACKAGES permission for Android 11+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            basePermissions.add("android.permission.QUERY_ALL_PACKAGES")
+        }
+        
+        return basePermissions
+    }
+    
+    /**
+     * Register permission launchers for an activity
+     */
+    fun registerPermissionLaunchers(
+        activity: ComponentActivity,
+        onPermissionsGranted: () -> Unit,
+        onPermissionsDenied: () -> Unit
+    ) {
+        val requestPermissionLauncher = activity.registerForActivityResult(
+            ActivityResultContracts.RequestMultiplePermissions()
+        ) { permissions ->
+            if (permissions.all { it.value }) {
+                onPermissionsGranted()
+            } else {
+                onPermissionsDenied()
+            }
+        }
+        
+        // Launch permission request
+        val permissions = getRequiredPermissions().toTypedArray()
+        requestPermissionLauncher.launch(permissions)
+    }
+    
+    /**
+     * Open app settings to allow user to grant permissions manually
+     */
+    fun openAppSettings(activity: ComponentActivity) {
+        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+            data = Uri.fromParts("package", activity.packageName, null)
+        }
+        activity.startActivity(intent)
     }
 }
