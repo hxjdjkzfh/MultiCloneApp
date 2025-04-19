@@ -3,28 +3,26 @@ package com.multiclone.app.ui.screens.appselection
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.multiclone.app.data.model.AppInfo
-import com.multiclone.app.data.repository.CloneRepository
+import com.multiclone.app.data.repository.AppRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import timber.log.Timber
 import javax.inject.Inject
 
 /**
- * View state for the app selection screen
+ * UI state for the app selection screen
  */
-data class AppSelectionViewState(
-    val apps: List<AppInfo> = emptyList(),
+data class AppSelectionUiState(
+    val isLoading: Boolean = true,
+    val allApps: List<AppInfo> = emptyList(),
     val filteredApps: List<AppInfo> = emptyList(),
-    val isLoading: Boolean = false,
-    val searchQuery: String = "",
-    val error: String? = null,
-    val selectedApp: AppInfo? = null
+    val selectedPackageName: String? = null,
+    val isCreatingClone: Boolean = false,
+    val errorMessage: String? = null
 )
 
 /**
@@ -32,116 +30,172 @@ data class AppSelectionViewState(
  */
 @HiltViewModel
 class AppSelectionViewModel @Inject constructor(
-    private val cloneRepository: CloneRepository
+    private val appRepository: AppRepository
 ) : ViewModel() {
     
-    // UI state
-    private val _uiState = MutableStateFlow(AppSelectionViewState(isLoading = true))
-    val uiState: StateFlow<AppSelectionViewState> = _uiState.asStateFlow()
+    // Private mutable state flow
+    private val _uiState = MutableStateFlow(AppSelectionUiState())
+    
+    // Public immutable state flow
+    val uiState: StateFlow<AppSelectionUiState> = _uiState.asStateFlow()
     
     init {
-        Timber.d("AppSelectionViewModel initialized")
+        // Load apps when ViewModel is created
         loadInstalledApps()
     }
     
     /**
-     * Load all installed apps
+     * Loads all installed apps from the repository
      */
-    fun loadInstalledApps() {
+    private fun loadInstalledApps() {
         viewModelScope.launch {
-            Timber.d("Loading installed apps")
-            _uiState.update { it.copy(isLoading = true, error = null) }
+            _uiState.update { it.copy(isLoading = true) }
             
             try {
-                val apps = withContext(Dispatchers.IO) {
-                    cloneRepository.getInstalledApps().sortedBy { it.appName }
-                }
+                val installedApps = appRepository.getInstalledApps()
+                
+                // Filter to keep only apps that can be cloned
+                val cloneableApps = installedApps.filter { it.isCloneable() }
+                
+                // Sort by app name
+                val sortedApps = cloneableApps.sortedBy { it.appName.lowercase() }
                 
                 _uiState.update { 
                     it.copy(
-                        apps = apps,
-                        filteredApps = apps,
-                        isLoading = false
-                    ) 
+                        isLoading = false,
+                        allApps = sortedApps,
+                        filteredApps = sortedApps
+                    )
                 }
-                
-                Timber.d("Loaded ${apps.size} installed apps")
             } catch (e: Exception) {
-                Timber.e(e, "Failed to load installed apps")
+                Timber.e(e, "Error loading installed apps")
                 _uiState.update { 
                     it.copy(
-                        error = "Failed to load installed apps: ${e.message}",
-                        isLoading = false
-                    ) 
+                        isLoading = false,
+                        errorMessage = "Error loading apps: ${e.message}"
+                    )
                 }
             }
         }
     }
     
     /**
-     * Update the search query
+     * Filters the app list based on search query
      */
-    fun updateSearchQuery(query: String) {
+    fun filterApps(query: String) {
         viewModelScope.launch {
-            _uiState.update { it.copy(searchQuery = query) }
-            filterApps()
+            val currentState = _uiState.value
+            
+            // Don't filter if apps haven't been loaded yet
+            if (currentState.allApps.isEmpty()) return@launch
+            
+            if (query.isBlank()) {
+                // No filter, show all apps
+                _uiState.update { it.copy(filteredApps = it.allApps) }
+            } else {
+                // Filter by app name or package name
+                val lowerQuery = query.lowercase()
+                val filtered = currentState.allApps.filter { app ->
+                    app.appName.lowercase().contains(lowerQuery) ||
+                    app.packageName.lowercase().contains(lowerQuery)
+                }
+                _uiState.update { it.copy(filteredApps = filtered) }
+            }
         }
     }
     
     /**
-     * Filter apps based on the current search query
+     * Selects an app to clone
      */
-    private fun filterApps() {
-        val query = _uiState.value.searchQuery.trim().lowercase()
-        
-        if (query.isEmpty()) {
-            // If the query is empty, show all apps
-            _uiState.update { it.copy(filteredApps = it.apps) }
-            return
+    fun selectApp(packageName: String) {
+        viewModelScope.launch {
+            // Find the app in our list
+            val app = _uiState.value.allApps.find { it.packageName == packageName }
+            
+            if (app != null) {
+                _uiState.update { it.copy(selectedPackageName = packageName) }
+            } else {
+                _uiState.update {
+                    it.copy(
+                        errorMessage = "Selected app not found"
+                    )
+                }
+            }
         }
-        
-        // Filter apps by name or package name
-        val filteredApps = _uiState.value.apps.filter { app ->
-            app.appName.lowercase().contains(query) || 
-            app.packageName.lowercase().contains(query)
+    }
+    
+    /**
+     * Clears the current app selection
+     */
+    fun clearSelection() {
+        _uiState.update { it.copy(selectedPackageName = null) }
+    }
+    
+    /**
+     * Dismisses the current error message
+     */
+    fun dismissError() {
+        _uiState.update { it.copy(errorMessage = null) }
+    }
+    
+    companion object {
+        /**
+         * Creates a preview version of the ViewModel with sample data
+         */
+        fun createPreview(): AppSelectionViewModel {
+            val mockRepository = object : AppRepository {
+                override suspend fun getInstalledApps(): List<AppInfo> {
+                    return listOf(
+                        AppInfo.createSimplified(
+                            packageName = "com.example.app1",
+                            appName = "Example App 1"
+                        ),
+                        AppInfo.createSimplified(
+                            packageName = "com.example.app2",
+                            appName = "Example App 2"
+                        ),
+                        AppInfo.createSimplified(
+                            packageName = "com.example.app3",
+                            appName = "Example App 3"
+                        )
+                    )
+                }
+                
+                override suspend fun getAppInfo(packageName: String): AppInfo? {
+                    return when (packageName) {
+                        "com.example.app1" -> AppInfo.createSimplified(
+                            packageName = "com.example.app1",
+                            appName = "Example App 1"
+                        )
+                        "com.example.app2" -> AppInfo.createSimplified(
+                            packageName = "com.example.app2",
+                            appName = "Example App 2"
+                        )
+                        "com.example.app3" -> AppInfo.createSimplified(
+                            packageName = "com.example.app3",
+                            appName = "Example App 3"
+                        )
+                        else -> null
+                    }
+                }
+                
+                override suspend fun isAppInstalled(packageName: String): Boolean {
+                    return packageName.startsWith("com.example.")
+                }
+            }
+            
+            return AppSelectionViewModel(mockRepository).apply {
+                viewModelScope.launch {
+                    val apps = mockRepository.getInstalledApps()
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            allApps = apps,
+                            filteredApps = apps
+                        )
+                    }
+                }
+            }
         }
-        
-        _uiState.update { it.copy(filteredApps = filteredApps) }
-        Timber.d("Filtered to ${filteredApps.size} apps")
-    }
-    
-    /**
-     * Check if an app can be cloned (e.g., hasn't reached the limit)
-     */
-    fun canCloneApp(packageName: String): Boolean {
-        // In a real implementation, we would check if the app has reached its clone limit
-        // For now, we'll assume unlimited clones are allowed
-        return true
-    }
-    
-    /**
-     * Get the clone count for an app
-     */
-    fun getCloneCountForApp(packageName: String): Int {
-        return cloneRepository.getCloneCountForPackage(packageName)
-    }
-    
-    /**
-     * Select an app for cloning
-     */
-    fun selectApp(app: AppInfo?) {
-        _uiState.update { it.copy(selectedApp = app) }
-    }
-    
-    /**
-     * Clear any error message
-     */
-    fun clearError() {
-        _uiState.update { it.copy(error = null) }
-    }
-    
-    override fun onCleared() {
-        super.onCleared()
-        Timber.d("AppSelectionViewModel cleared")
     }
 }

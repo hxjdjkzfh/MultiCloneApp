@@ -2,26 +2,29 @@ package com.multiclone.app.ui.screens.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.multiclone.app.core.virtualization.CloneManagerService
+import com.multiclone.app.core.virtualization.VirtualAppEngine
 import com.multiclone.app.data.model.CloneInfo
 import com.multiclone.app.data.repository.CloneRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
 
 /**
- * View state for the home screen
+ * UI state for the home screen
  */
-data class HomeViewState(
+data class HomeUiState(
+    val isLoading: Boolean = true,
     val clones: List<CloneInfo> = emptyList(),
-    val isLoading: Boolean = false,
-    val error: String? = null,
-    val runningCloneCount: Int = 0
+    val isOperationInProgress: Boolean = false,
+    val operationMessage: String? = null,
+    val errorMessage: String? = null
 )
 
 /**
@@ -30,110 +33,217 @@ data class HomeViewState(
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val cloneRepository: CloneRepository,
-    private val cloneManagerService: CloneManagerService
+    private val virtualAppEngine: VirtualAppEngine
 ) : ViewModel() {
     
-    // UI state
-    private val _uiState = MutableStateFlow(HomeViewState(isLoading = true))
-    val uiState: StateFlow<HomeViewState> = _uiState.asStateFlow()
+    // Private mutable state flow
+    private val _uiState = MutableStateFlow(HomeUiState())
+    
+    // Public immutable state flow
+    val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
     
     init {
-        Timber.d("HomeViewModel initialized")
+        // Load clones when ViewModel is created
         loadClones()
     }
     
     /**
-     * Load all clones from the repository
+     * Loads clones from the repository
      */
-    fun loadClones() {
+    private fun loadClones() {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, error = null) }
+            _uiState.update { it.copy(isLoading = true) }
             
             try {
-                // Get the clones from the repository
-                val clones = cloneRepository.getAllClones()
-                val runningCount = cloneRepository.getRunningCloneCount()
+                // First load from storage
+                cloneRepository.loadClones()
                 
-                _uiState.update { 
-                    it.copy(
-                        clones = clones, 
-                        runningCloneCount = runningCount,
-                        isLoading = false
-                    ) 
+                // Then collect updates
+                cloneRepository.clones.collect { clones ->
+                    _uiState.update { 
+                        it.copy(
+                            isLoading = false,
+                            clones = clones
+                        )
+                    }
                 }
-                
-                Timber.d("Loaded ${clones.size} clones, $runningCount running")
             } catch (e: Exception) {
-                Timber.e(e, "Failed to load clones")
+                Timber.e(e, "Error loading clones")
                 _uiState.update { 
                     it.copy(
-                        error = "Failed to load cloned apps: ${e.message}",
-                        isLoading = false
-                    ) 
+                        isLoading = false,
+                        errorMessage = "Error loading clones: ${e.message}"
+                    )
                 }
             }
         }
     }
     
     /**
-     * Launch a cloned app
+     * Launches a cloned app
      */
     fun launchClone(cloneId: String) {
         viewModelScope.launch {
-            Timber.d("Launching clone: $cloneId")
+            // Set operation in progress
+            _uiState.update { 
+                it.copy(
+                    isOperationInProgress = true,
+                    operationMessage = "Launching app..."
+                )
+            }
             
             try {
-                if (cloneManagerService.launchApp(cloneId)) {
-                    // Update the UI state with the new running count
-                    loadClones()
+                // Get the clone
+                val clone = cloneRepository.getCloneById(cloneId)
+                if (clone == null) {
+                    _uiState.update {
+                        it.copy(
+                            isOperationInProgress = false,
+                            errorMessage = "Clone not found"
+                        )
+                    }
+                    return@launch
+                }
+                
+                // Launch the clone
+                val success = virtualAppEngine.launchClone(clone)
+                
+                if (success) {
+                    // Update launch stats
+                    val updatedClone = clone.updateLaunchStats()
+                    cloneRepository.updateClone(updatedClone)
                 } else {
-                    _uiState.update { 
-                        it.copy(error = "Failed to launch the cloned app") 
+                    _uiState.update {
+                        it.copy(
+                            isOperationInProgress = false,
+                            errorMessage = "Failed to launch app"
+                        )
                     }
                 }
             } catch (e: Exception) {
-                Timber.e(e, "Failed to launch clone: $cloneId")
-                _uiState.update { 
-                    it.copy(error = "Failed to launch the cloned app: ${e.message}") 
+                Timber.e(e, "Error launching clone $cloneId")
+                _uiState.update {
+                    it.copy(
+                        isOperationInProgress = false,
+                        errorMessage = "Error launching app: ${e.message}"
+                    )
                 }
+            } finally {
+                // Operation complete
+                _uiState.update { it.copy(isOperationInProgress = false, operationMessage = null) }
             }
         }
     }
     
     /**
-     * Delete a cloned app
+     * Deletes a cloned app
      */
     fun deleteClone(cloneId: String) {
         viewModelScope.launch {
-            Timber.d("Deleting clone: $cloneId")
+            // Set operation in progress
+            _uiState.update { 
+                it.copy(
+                    isOperationInProgress = true, 
+                    operationMessage = "Deleting clone..."
+                )
+            }
             
             try {
-                if (cloneManagerService.deleteClone(cloneId)) {
-                    // Reload the clones after deletion
-                    loadClones()
-                } else {
-                    _uiState.update { 
-                        it.copy(error = "Failed to delete the cloned app") 
+                // Get the clone first
+                val clone = cloneRepository.getCloneById(cloneId)
+                if (clone == null) {
+                    _uiState.update {
+                        it.copy(
+                            isOperationInProgress = false,
+                            errorMessage = "Clone not found"
+                        )
+                    }
+                    return@launch
+                }
+                
+                // Remove from virtualization engine
+                val engineSuccess = virtualAppEngine.removeClone(clone)
+                if (!engineSuccess) {
+                    Timber.w("Failed to remove clone from virtual engine, continuing with repository removal")
+                }
+                
+                // Remove from repository
+                val repoSuccess = cloneRepository.removeClone(cloneId)
+                
+                if (!repoSuccess) {
+                    _uiState.update {
+                        it.copy(
+                            isOperationInProgress = false,
+                            errorMessage = "Failed to remove clone from repository"
+                        )
                     }
                 }
             } catch (e: Exception) {
-                Timber.e(e, "Failed to delete clone: $cloneId")
-                _uiState.update { 
-                    it.copy(error = "Failed to delete the cloned app: ${e.message}") 
+                Timber.e(e, "Error deleting clone $cloneId")
+                _uiState.update {
+                    it.copy(
+                        isOperationInProgress = false,
+                        errorMessage = "Error deleting clone: ${e.message}"
+                    )
                 }
+            } finally {
+                // Operation complete
+                _uiState.update { it.copy(isOperationInProgress = false, operationMessage = null) }
             }
         }
     }
     
     /**
-     * Clear any error message
+     * Dismisses the current error message
      */
-    fun clearError() {
-        _uiState.update { it.copy(error = null) }
+    fun dismissError() {
+        _uiState.update { it.copy(errorMessage = null) }
     }
     
-    override fun onCleared() {
-        super.onCleared()
-        Timber.d("HomeViewModel cleared")
+    companion object {
+        /**
+         * Creates a preview version of the ViewModel with sample data
+         */
+        fun createPreview(): HomeViewModel {
+            val mockRepository = object : CloneRepository {
+                override val clones = MutableStateFlow(
+                    listOf(
+                        CloneInfo(
+                            id = "1",
+                            packageName = "com.example.app1",
+                            originalAppName = "Example App 1",
+                            cloneName = "Work Profile",
+                            creationTime = System.currentTimeMillis() - 86400000 * 2, // 2 days ago
+                            lastLaunchTime = System.currentTimeMillis() - 3600000, // 1 hour ago
+                            launchCount = 10
+                        ),
+                        CloneInfo(
+                            id = "2",
+                            packageName = "com.example.app2",
+                            originalAppName = "Example App 2",
+                            creationTime = System.currentTimeMillis() - 86400000, // 1 day ago
+                            lastLaunchTime = 0, // Never launched
+                            launchCount = 0
+                        )
+                    )
+                )
+                
+                override suspend fun addClone(clone: CloneInfo): Boolean = true
+                override suspend fun updateClone(clone: CloneInfo): Boolean = true
+                override suspend fun removeClone(cloneId: String): Boolean = true
+                override suspend fun getCloneById(cloneId: String): CloneInfo? = null
+                override suspend fun loadClones(): Boolean = true
+            }
+            
+            val mockEngine = object : VirtualAppEngine {
+                override suspend fun installClone(packageName: String, cloneInfo: CloneInfo): Boolean = true
+                override suspend fun launchClone(cloneInfo: CloneInfo): Boolean = true
+                override suspend fun removeClone(cloneInfo: CloneInfo): Boolean = true
+                override suspend fun isCloneInstalled(cloneInfo: CloneInfo): Boolean = true
+                override suspend fun updateCloneSettings(cloneInfo: CloneInfo): Boolean = true
+            }
+            
+            return HomeViewModel(mockRepository, mockEngine)
+        }
     }
 }

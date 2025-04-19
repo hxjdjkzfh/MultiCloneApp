@@ -5,19 +5,18 @@ import androidx.compose.material3.Shapes
 import androidx.compose.ui.unit.dp
 
 /**
- * Custom shapes for the application
- * Material 3 has default shapes, but we're customizing them slightly
+ * Shape definitions for the MultiClone app following Material3 guidelines
  */
 val Shapes = Shapes(
-    // Small components like small buttons, chips, etc.
-    small = RoundedCornerShape(8.dp),
+    // Used for small components like chips, small buttons
+    small = RoundedCornerShape(4.dp),
     
-    // Medium components like cards, dialog surfaces, etc.
-    medium = RoundedCornerShape(12.dp),
+    // Used for medium components like cards, dialogs, etc.
+    medium = RoundedCornerShape(8.dp),
     
-    // Large components like bottom sheets, expanded menu surfaces, etc.
+    // Used for large components like bottom sheets, large dialogs
     large = RoundedCornerShape(16.dp),
     
-    // Extra large components - used for custom components
+    // Used for extra large components like top-level surfaces
     extraLarge = RoundedCornerShape(24.dp)
 )
