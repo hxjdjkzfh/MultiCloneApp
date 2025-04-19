@@ -1,4 +1,4 @@
-modules = ["kotlin", "java", "java-latest", "java-17"]
+modules = ["kotlin", "java", "java-latest", "java-17", "openjdk-17"]
 
 [nix]
 channel = "stable-24_05"
@@ -19,6 +19,10 @@ args = "Android App Build and Run"
 [[workflows.workflow.tasks]]
 task = "workflow.run"
 args = "build_and_run_android"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "android_clean_build"
 
 [[workflows.workflow]]
 name = "Android App Build and Run"
@@ -48,6 +52,20 @@ task = "packager.installForAll"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "./gradlew :app:assembleDebug && ./gradlew :app:installDebug"
+
+[[workflows.workflow]]
+name = "android_clean_build"
+author = "agent"
+
+[workflows.workflow.metadata]
+agentRequireRestartOnSave = false
+
+[[workflows.workflow.tasks]]
+task = "packager.installForAll"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "./gradlew clean build --no-daemon"
 
 [deployment]
 run = ["sh", "-c", "./gradlew :app:installDebug"]

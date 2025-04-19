@@ -1,139 +1,141 @@
 package com.multiclone.app.core.virtualization
 
 import android.content.Context
-import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.io.File
-import java.io.FileOutputStream
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Handles the installation of cloned apps
+ * Handles the installation of apps into virtual environments
  */
 @Singleton
 class ClonedAppInstaller @Inject constructor(
-    private val context: Context
+    private val context: Context,
+    private val cloneEnvironment: CloneEnvironment
 ) {
-    // Root directory for storing APKs
-    private val apkStorageDir: File by lazy {
-        File(context.filesDir, "apks")
-    }
-    
-    init {
-        // Ensure the APK storage directory exists
-        if (!apkStorageDir.exists()) {
-            apkStorageDir.mkdirs()
+    /**
+     * Install an app into a virtual environment
+     *
+     * @param cloneId the ID of the clone
+     * @param packageName the package name of the app to clone
+     * @return true if the installation was successful, false otherwise
+     */
+    suspend fun installApp(cloneId: String, packageName: String): Boolean = withContext(Dispatchers.IO) {
+        Timber.d("Installing app $packageName for clone $cloneId")
+        
+        try {
+            // In a real implementation, this would involve:
+            // 1. Extracting the app's APK
+            // 2. Copying it to the virtual environment
+            // 3. Setting up appropriate permissions and configurations
+            // 4. Installing within the isolated environment
+            
+            // For demonstration purposes, we'll simulate a successful installation
+            // by creating placeholder files
+            
+            val dataDir = cloneEnvironment.getCloneDataDir(cloneId)
+            val appDataDir = File(dataDir, packageName)
+            if (!appDataDir.exists()) {
+                appDataDir.mkdirs()
+            }
+            
+            // Create a placeholder APK file to simulate installation
+            val placeholderApk = File(appDataDir, "app.apk")
+            if (!placeholderApk.exists()) {
+                placeholderApk.createNewFile()
+            }
+            
+            // Create placeholder for app data
+            File(appDataDir, "app_data").mkdirs()
+            
+            // Simulate grabbing app metadata
+            simulateAppMetadataExtraction(packageName, appDataDir)
+            
+            Timber.d("App $packageName installed for clone $cloneId")
+            return@withContext true
+        } catch (e: Exception) {
+            Timber.e(e, "Error installing app $packageName for clone $cloneId")
+            return@withContext false
         }
     }
     
     /**
-     * Prepare the clone APK
-     * This extracts the original APK and prepares it for virtualization
+     * Simulate extracting app metadata
      */
-    fun prepareCloneApk(packageName: String, cloneId: String): String? {
+    private fun simulateAppMetadataExtraction(packageName: String, targetDir: File) {
         try {
-            Timber.d("Preparing clone APK for package: $packageName with ID: $cloneId")
+            // In a real implementation, we would extract actual metadata from the APK
+            // For now, we'll just create a placeholder file with some basic info
             
-            // Get the original app info
-            val packageInfo = getPackageInfo(packageName) ?: return null
-            
-            // Create a directory for the clone's APK
-            val cloneApkDir = File(apkStorageDir, cloneId)
-            if (!cloneApkDir.exists()) {
-                cloneApkDir.mkdirs()
-            }
-            
-            // Extract the original APK
-            val originalApkPath = packageInfo.applicationInfo.sourceDir
-            val originalApkFile = File(originalApkPath)
-            
-            // Copy the APK to our clone directory
-            val cloneApkFile = File(cloneApkDir, "base.apk")
-            if (!copyFile(originalApkFile, cloneApkFile)) {
-                Timber.e("Failed to copy APK for clone: $cloneId")
-                return null
-            }
-            
-            // Create a metadata file for the clone
-            val metadataFile = File(cloneApkDir, "metadata.json")
-            val metadata = """
-                {
-                    "originalPackage": "$packageName",
-                    "cloneId": "$cloneId",
-                    "originalApkPath": "$originalApkPath",
-                    "versionCode": ${packageInfo.versionCode},
-                    "versionName": "${packageInfo.versionName}",
-                    "lastUpdated": ${System.currentTimeMillis()}
+            val metadataFile = File(targetDir, "metadata.txt")
+            val packageInfo = try {
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                    context.packageManager.getPackageInfo(packageName, PackageManager.PackageInfoFlags.of(0))
+                } else {
+                    @Suppress("DEPRECATION")
+                    context.packageManager.getPackageInfo(packageName, 0)
                 }
-            """.trimIndent()
-            
-            metadataFile.writeText(metadata)
-            
-            Timber.d("Successfully prepared APK for clone: $cloneId")
-            return cloneApkFile.absolutePath
-        } catch (e: Exception) {
-            Timber.e(e, "Failed to prepare APK for clone: $cloneId")
-            return null
-        }
-    }
-    
-    /**
-     * Clean up the clone's APK files
-     */
-    fun cleanupCloneApk(cloneId: String): Boolean {
-        try {
-            Timber.d("Cleaning up APK for clone: $cloneId")
-            
-            val cloneApkDir = File(apkStorageDir, cloneId)
-            if (!cloneApkDir.exists()) {
-                Timber.w("APK directory doesn't exist for clone: $cloneId")
-                return true
+            } catch (e: PackageManager.NameNotFoundException) {
+                Timber.e(e, "Package not found: $packageName")
+                null
             }
             
-            // Recursively delete the APK directory
-            return cloneApkDir.deleteRecursively()
+            // Write basic info to metadata file
+            if (packageInfo != null) {
+                val versionName = packageInfo.versionName ?: "unknown"
+                val versionCode = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                    packageInfo.longVersionCode
+                } else {
+                    @Suppress("DEPRECATION")
+                    packageInfo.versionCode.toLong()
+                }
+                
+                val appName = packageInfo.applicationInfo.loadLabel(context.packageManager).toString()
+                
+                metadataFile.writeText(
+                    """
+                    packageName: $packageName
+                    appName: $appName
+                    versionName: $versionName
+                    versionCode: $versionCode
+                    installedAt: ${System.currentTimeMillis()}
+                    """.trimIndent()
+                )
+            }
         } catch (e: Exception) {
-            Timber.e(e, "Failed to clean up APK for clone: $cloneId")
-            return false
+            Timber.e(e, "Error simulating app metadata extraction for $packageName")
         }
     }
     
     /**
-     * Get the APK path for a clone
+     * Uninstall an app from a virtual environment
      */
-    fun getCloneApkPath(cloneId: String): String? {
-        val apkFile = File(File(apkStorageDir, cloneId), "base.apk")
-        return if (apkFile.exists()) apkFile.absolutePath else null
-    }
-    
-    /**
-     * Copy a file from source to destination
-     */
-    private fun copyFile(sourceFile: File, destFile: File): Boolean {
+    suspend fun uninstallApp(cloneId: String, packageName: String): Boolean = withContext(Dispatchers.IO) {
+        Timber.d("Uninstalling app $packageName for clone $cloneId")
+        
         try {
-            sourceFile.inputStream().use { input ->
-                FileOutputStream(destFile).use { output ->
-                    input.copyTo(output)
+            // In a real implementation, this would properly uninstall the app
+            // For demonstration purposes, we'll just delete the app data directory
+            
+            val dataDir = cloneEnvironment.getCloneDataDir(cloneId)
+            val appDataDir = File(dataDir, packageName)
+            
+            if (appDataDir.exists()) {
+                val result = appDataDir.deleteRecursively()
+                if (!result) {
+                    Timber.e("Failed to delete app data directory for $packageName")
                 }
             }
-            return true
+            
+            Timber.d("App $packageName uninstalled for clone $cloneId")
+            return@withContext true
         } catch (e: Exception) {
-            Timber.e(e, "Failed to copy file from ${sourceFile.absolutePath} to ${destFile.absolutePath}")
-            return false
-        }
-    }
-    
-    /**
-     * Get package info for an app
-     */
-    private fun getPackageInfo(packageName: String): PackageInfo? {
-        return try {
-            context.packageManager.getPackageInfo(packageName, 0)
-        } catch (e: PackageManager.NameNotFoundException) {
-            Timber.e("Package not found: $packageName")
-            null
+            Timber.e(e, "Error uninstalling app $packageName for clone $cloneId")
+            return@withContext false
         }
     }
 }

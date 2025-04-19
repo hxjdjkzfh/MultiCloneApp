@@ -1,136 +1,140 @@
 package com.multiclone.app.core.virtualization
 
 import android.content.Context
-import android.os.Environment
-import com.multiclone.app.data.model.CloneInfo
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Manages the isolated environment for app clones
+ * Manages the virtual environment for cloned apps
  */
 @Singleton
 class CloneEnvironment @Inject constructor(
     private val context: Context
 ) {
-    // Root directory for environment storage
-    private val environmentRoot: File by lazy {
-        File(context.filesDir, "environments")
-    }
-    
-    init {
-        // Ensure the environments directory exists
-        if (!environmentRoot.exists()) {
-            environmentRoot.mkdirs()
-        }
-    }
+    private val environmentsDir = File(context.filesDir, "environments")
+    private var isInitialized = false
     
     /**
-     * Set up the isolated environment for a clone
+     * Initialize the clone environment
      */
-    fun setupEnvironment(cloneInfo: CloneInfo): Boolean {
+    suspend fun initialize(): Boolean = withContext(Dispatchers.IO) {
+        Timber.d("Initializing clone environment")
+        
         try {
-            Timber.d("Setting up environment for clone: ${cloneInfo.id}")
-            
-            // Create the environment directory
-            val envDir = File(environmentRoot, cloneInfo.id)
-            if (!envDir.exists()) {
-                envDir.mkdirs()
-            }
-            
-            // Create subdirectories for the clone's data
-            createEnvironmentStructure(envDir)
-            
-            // Create a basic environment configuration file
-            val configFile = File(envDir, "environment.json")
-            val config = """
-                {
-                    "cloneId": "${cloneInfo.id}",
-                    "originalPackage": "${cloneInfo.originalPackageName}",
-                    "created": ${System.currentTimeMillis()},
-                    "storage": {
-                        "internal": "${envDir.absolutePath}/internal",
-                        "external": "${envDir.absolutePath}/external"
-                    }
+            // Create the environments directory if it doesn't exist
+            if (!environmentsDir.exists()) {
+                val result = environmentsDir.mkdirs()
+                if (!result) {
+                    Timber.e("Failed to create environments directory")
+                    return@withContext false
                 }
-            """.trimIndent()
-            
-            configFile.writeText(config)
-            
-            Timber.d("Environment set up successfully for clone: ${cloneInfo.id}")
-            return true
-        } catch (e: Exception) {
-            Timber.e(e, "Failed to set up environment for clone: ${cloneInfo.id}")
-            return false
-        }
-    }
-    
-    /**
-     * Clean up the environment for a clone
-     */
-    fun cleanupEnvironment(cloneId: String): Boolean {
-        try {
-            Timber.d("Cleaning up environment for clone: $cloneId")
-            
-            val envDir = File(environmentRoot, cloneId)
-            if (!envDir.exists()) {
-                Timber.w("Environment directory doesn't exist for clone: $cloneId")
-                return true
             }
             
-            // Recursively delete the environment directory
-            return envDir.deleteRecursively()
+            // Setup any global requirements for the virtualization environment
+            // In a real implementation, this might involve creating shared libraries,
+            // setting up security contexts, etc.
+            
+            isInitialized = true
+            Timber.d("Clone environment initialized successfully")
+            return@withContext true
         } catch (e: Exception) {
-            Timber.e(e, "Failed to clean up environment for clone: $cloneId")
-            return false
+            Timber.e(e, "Error initializing clone environment")
+            return@withContext false
         }
     }
     
     /**
-     * Get the environment path for a clone
+     * Prepare the environment for a specific app
      */
-    fun getEnvironmentPath(cloneId: String): String {
-        return File(environmentRoot, cloneId).absolutePath
+    suspend fun prepareAppEnvironment(cloneId: String, packageName: String): Boolean = withContext(Dispatchers.IO) {
+        Timber.d("Preparing environment for clone $cloneId (package: $packageName)")
+        
+        if (!isInitialized) {
+            Timber.e("Clone environment not initialized")
+            return@withContext false
+        }
+        
+        try {
+            // Create a directory for this specific clone
+            val cloneDir = File(environmentsDir, cloneId)
+            if (!cloneDir.exists()) {
+                val result = cloneDir.mkdirs()
+                if (!result) {
+                    Timber.e("Failed to create directory for clone: $cloneId")
+                    return@withContext false
+                }
+            }
+            
+            // Create subdirectories for app data
+            val dataDir = File(cloneDir, "data")
+            val cacheDir = File(cloneDir, "cache")
+            val filesDir = File(cloneDir, "files")
+            
+            if (!dataDir.exists()) dataDir.mkdirs()
+            if (!cacheDir.exists()) cacheDir.mkdirs()
+            if (!filesDir.exists()) filesDir.mkdirs()
+            
+            // In a real implementation, this would involve more sophisticated setup:
+            // - Setting up container or sandbox environment
+            // - Configuring security and isolation
+            // - Preparing filesystem mounts and redirections
+            // - Setting up IPC channels
+            
+            Timber.d("Environment prepared for clone $cloneId")
+            return@withContext true
+        } catch (e: Exception) {
+            Timber.e(e, "Error preparing environment for clone: $cloneId")
+            return@withContext false
+        }
     }
     
     /**
-     * Create the standard directory structure for an app environment
+     * Clean up the environment for a specific app
      */
-    private fun createEnvironmentStructure(envDir: File) {
-        // Create internal and external storage directories
-        val internalDir = File(envDir, "internal")
-        internalDir.mkdirs()
+    suspend fun cleanupAppEnvironment(cloneId: String): Boolean = withContext(Dispatchers.IO) {
+        Timber.d("Cleaning up environment for clone $cloneId")
         
-        val externalDir = File(envDir, "external")
-        externalDir.mkdirs()
-        
-        // Create standard app directories
-        val dataDirs = listOf(
-            File(internalDir, "files"),
-            File(internalDir, "cache"),
-            File(internalDir, "shared_prefs"),
-            File(internalDir, "databases"),
-            File(externalDir, "Download"),
-            File(externalDir, "Pictures"),
-            File(externalDir, "Documents")
-        )
-        
-        dataDirs.forEach { it.mkdirs() }
+        try {
+            val cloneDir = File(environmentsDir, cloneId)
+            if (cloneDir.exists()) {
+                // Recursively delete the clone directory and all its contents
+                val result = cloneDir.deleteRecursively()
+                if (!result) {
+                    Timber.e("Failed to clean up directory for clone: $cloneId")
+                    return@withContext false
+                }
+            }
+            
+            Timber.d("Environment cleaned up for clone $cloneId")
+            return@withContext true
+        } catch (e: Exception) {
+            Timber.e(e, "Error cleaning up environment for clone: $cloneId")
+            return@withContext false
+        }
     }
     
     /**
-     * Get the internal storage path for a clone
+     * Get the data directory for a cloned app
      */
-    fun getInternalStoragePath(cloneId: String): String {
-        return File(File(environmentRoot, cloneId), "internal").absolutePath
+    fun getCloneDataDir(cloneId: String): File {
+        return File(File(environmentsDir, cloneId), "data")
     }
     
     /**
-     * Get the external storage path for a clone
+     * Get the cache directory for a cloned app
      */
-    fun getExternalStoragePath(cloneId: String): String {
-        return File(File(environmentRoot, cloneId), "external").absolutePath
+    fun getCloneCacheDir(cloneId: String): File {
+        return File(File(environmentsDir, cloneId), "cache")
+    }
+    
+    /**
+     * Get the files directory for a cloned app
+     */
+    fun getCloneFilesDir(cloneId: String): File {
+        return File(File(environmentsDir, cloneId), "files")
     }
 }

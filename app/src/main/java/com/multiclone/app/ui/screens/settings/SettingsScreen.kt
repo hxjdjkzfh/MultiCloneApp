@@ -1,49 +1,69 @@
 package com.multiclone.app.ui.screens.settings
 
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
+import androidx.compose.material.icons.outlined.DarkMode
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.Security
+import androidx.compose.material.icons.outlined.Storage
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.Divider
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.multiclone.app.R
 
 /**
- * Settings screen
+ * Settings screen for the app
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
-    onNavigateBack: () -> Unit
+    onBackClick: () -> Unit
 ) {
-    // Settings state
-    var enableNotifications by remember { mutableStateOf(true) }
-    var autoStartEnabled by remember { mutableStateOf(false) }
-    var autoCleanupEnabled by remember { mutableStateOf(true) }
-    var darkModeEnabled by remember { mutableStateOf(false) }
-    var compactMode by remember { mutableStateOf(false) }
-    
-    // Advanced settings
-    var advancedSettingsExpanded by remember { mutableStateOf(false) }
-    var developerModeEnabled by remember { mutableStateOf(false) }
-    var debugLoggingEnabled by remember { mutableStateOf(false) }
+    var showClearDataDialog by remember { mutableStateOf(false) }
     
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Text(stringResource(R.string.settings_title))
-                },
+            CenterAlignedTopAppBar(
+                title = { Text("Settings") },
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                    IconButton(onClick = onBackClick) {
+                        Icon(
+                            imageVector = Icons.Default.ArrowBack,
+                            contentDescription = "Back"
+                        )
                     }
-                }
+                },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary
+                )
             )
         }
     ) { paddingValues ->
@@ -52,280 +72,174 @@ fun SettingsScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
                 .verticalScroll(rememberScrollState())
+                .padding(16.dp)
         ) {
-            // General Settings
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    Text(
-                        text = stringResource(R.string.settings_general_section),
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    
-                    // Notifications
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            Text(
-                                text = stringResource(R.string.settings_notifications),
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                            Text(
-                                text = stringResource(R.string.settings_notifications_desc),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                            )
-                        }
-                        
-                        Switch(
-                            checked = enableNotifications,
-                            onCheckedChange = { enableNotifications = it }
-                        )
-                    }
-                    
-                    Divider()
-                    
-                    // Auto-start
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            Text(
-                                text = stringResource(R.string.settings_auto_start),
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                            Text(
-                                text = stringResource(R.string.settings_auto_start_desc),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                            )
-                        }
-                        
-                        Switch(
-                            checked = autoStartEnabled,
-                            onCheckedChange = { autoStartEnabled = it }
-                        )
-                    }
-                    
-                    Divider()
-                    
-                    // Auto-cleanup
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            Text(
-                                text = stringResource(R.string.settings_auto_cleanup),
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                            Text(
-                                text = stringResource(R.string.settings_auto_cleanup_desc),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                            )
-                        }
-                        
-                        Switch(
-                            checked = autoCleanupEnabled,
-                            onCheckedChange = { autoCleanupEnabled = it }
-                        )
-                    }
-                }
-            }
+            // Display settings
+            SettingsCategory(title = "Display")
             
-            // Appearance Settings
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    Text(
-                        text = stringResource(R.string.settings_appearance_section),
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    
-                    // Dark mode
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            Text(
-                                text = stringResource(R.string.settings_dark_mode),
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                            Text(
-                                text = stringResource(R.string.settings_dark_mode_desc),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                            )
-                        }
-                        
-                        Switch(
-                            checked = darkModeEnabled,
-                            onCheckedChange = { darkModeEnabled = it }
-                        )
-                    }
-                    
-                    Divider()
-                    
-                    // Compact mode
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            Text(
-                                text = stringResource(R.string.settings_compact_mode),
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                            Text(
-                                text = stringResource(R.string.settings_compact_mode_desc),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                            )
-                        }
-                        
-                        Switch(
-                            checked = compactMode,
-                            onCheckedChange = { compactMode = it }
-                        )
-                    }
-                }
-            }
+            SwitchSetting(
+                title = "Dark Mode",
+                description = "Use dark theme",
+                icon = Icons.Outlined.DarkMode,
+                checked = false,
+                onCheckedChange = { /* Handle theme change */ }
+            )
             
-            // Advanced Settings
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
+            Divider(modifier = Modifier.padding(vertical = 8.dp))
+            
+            // Notifications settings
+            SettingsCategory(title = "Notifications")
+            
+            SwitchSetting(
+                title = "Enable Notifications",
+                description = "Get notified when cloned apps are updated",
+                icon = Icons.Outlined.Notifications,
+                checked = true,
+                onCheckedChange = { /* Handle notification setting */ }
+            )
+            
+            Divider(modifier = Modifier.padding(vertical = 8.dp))
+            
+            // Storage settings
+            SettingsCategory(title = "Storage")
+            
+            SwitchSetting(
+                title = "Optimize Storage",
+                description = "Reduce storage usage for cloned apps",
+                icon = Icons.Outlined.Storage,
+                checked = true,
+                onCheckedChange = { /* Handle storage setting */ }
+            )
+            
+            Divider(modifier = Modifier.padding(vertical = 8.dp))
+            
+            // Security settings
+            SettingsCategory(title = "Security")
+            
+            SwitchSetting(
+                title = "Enhanced Security",
+                description = "Apply additional security for clones",
+                icon = Icons.Outlined.Security,
+                checked = false,
+                onCheckedChange = { /* Handle security setting */ }
+            )
+            
+            Divider(modifier = Modifier.padding(vertical = 8.dp))
+            
+            // Data management
+            SettingsCategory(title = "Data Management")
+            
+            TextButton(
+                onClick = { showClearDataDialog = true },
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = stringResource(R.string.settings_advanced_section),
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                        
-                        IconButton(onClick = { advancedSettingsExpanded = !advancedSettingsExpanded }) {
-                            Icon(
-                                imageVector = if (advancedSettingsExpanded) 
-                                    Icons.Default.ArrowBack else 
-                                    Icons.Default.ArrowBack, // Would be a dropdown icon
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
-                    }
-                    
-                    if (advancedSettingsExpanded) {
-                        // Developer mode
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column {
-                                Text(
-                                    text = stringResource(R.string.settings_developer_mode),
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
-                                Text(
-                                    text = stringResource(R.string.settings_developer_mode_desc),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                                )
-                            }
-                            
-                            Switch(
-                                checked = developerModeEnabled,
-                                onCheckedChange = { developerModeEnabled = it }
-                            )
-                        }
-                        
-                        Divider()
-                        
-                        // Debug logging
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column {
-                                Text(
-                                    text = stringResource(R.string.settings_debug_logging),
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
-                                Text(
-                                    text = stringResource(R.string.settings_debug_logging_desc),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                                )
-                            }
-                            
-                            Switch(
-                                checked = debugLoggingEnabled,
-                                onCheckedChange = { debugLoggingEnabled = it }
-                            )
-                        }
-                    }
-                }
+                Icon(
+                    imageVector = Icons.Outlined.Delete,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error
+                )
+                Text(
+                    text = "Clear All Cloned Apps Data",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(start = 16.dp)
+                )
             }
             
             // Version info
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+            Spacer(modifier = Modifier.height(32.dp))
+            Text(
+                text = "MultiClone App v1.0.0",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(8.dp)
+            )
+        }
+    }
+    
+    // Dialog for confirming clear data
+    if (showClearDataDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearDataDialog = false },
+            title = { Text("Clear All Data") },
+            text = { Text("This will remove all your cloned apps and their data. This action cannot be undone.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        // Handle clear data
+                        showClearDataDialog = false
+                    }
                 ) {
-                    Text(
-                        text = stringResource(R.string.app_name),
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    
-                    Spacer(modifier = Modifier.height(4.dp))
-                    
-                    Text(
-                        text = stringResource(R.string.settings_version, "1.0.0"),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                    )
+                    Text("Clear All", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showClearDataDialog = false }
+                ) {
+                    Text("Cancel")
                 }
             }
-            
-            Spacer(modifier = Modifier.height(16.dp))
-        }
+        )
+    }
+}
+
+/**
+ * Category title for settings
+ */
+@Composable
+private fun SettingsCategory(title: String) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.Bold,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(vertical = 8.dp)
+    )
+}
+
+/**
+ * Setting item with a switch
+ */
+@Composable
+private fun SwitchSetting(
+    title: String,
+    description: String,
+    icon: ImageVector,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp)
+    ) {
+        androidx.compose.material3.ListItem(
+            headlineContent = { 
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium
+                )
+            },
+            supportingContent = {
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            },
+            leadingContent = {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            },
+            trailingContent = {
+                Switch(
+                    checked = checked,
+                    onCheckedChange = onCheckedChange
+                )
+            }
+        )
     }
 }

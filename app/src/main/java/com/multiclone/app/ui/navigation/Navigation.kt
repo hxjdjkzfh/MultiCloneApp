@@ -8,36 +8,29 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.multiclone.app.ui.screens.about.AboutScreen
 import com.multiclone.app.ui.screens.appselection.AppSelectionScreen
-import com.multiclone.app.ui.screens.cloneconfig.CloneConfigScreen
 import com.multiclone.app.ui.screens.home.HomeScreen
 import com.multiclone.app.ui.screens.settings.SettingsScreen
+import timber.log.Timber
 
 /**
- * Navigation destinations for the app
+ * Navigation routes for the app
  */
 sealed class Screen(val route: String) {
-    // Main screens
     object Home : Screen("home")
     object AppSelection : Screen("app_selection")
+    object CloneConfiguration : Screen("clone_config/{packageName}")
+    object CloneDetails : Screen("clone_details/{cloneId}")
     object Settings : Screen("settings")
     object About : Screen("about")
     
-    // Screens with parameters
-    object CloneConfig : Screen("clone_config/{packageName}") {
-        fun createRoute(packageName: String): String {
+    // Helper functions to create routes with parameters
+    companion object {
+        fun createCloneConfigRoute(packageName: String): String {
             return "clone_config/$packageName"
         }
-    }
-    
-    object CloneDetail : Screen("clone_detail/{cloneId}") {
-        fun createRoute(cloneId: String): String {
-            return "clone_detail/$cloneId"
-        }
-    }
-    
-    object CloneSettings : Screen("clone_settings/{cloneId}") {
-        fun createRoute(cloneId: String): String {
-            return "clone_settings/$cloneId"
+        
+        fun createCloneDetailsRoute(cloneId: String): String {
+            return "clone_details/$cloneId"
         }
     }
 }
@@ -53,18 +46,22 @@ fun AppNavigation(
         navController = navController,
         startDestination = Screen.Home.route
     ) {
-        // Home screen - displays list of cloned apps
+        // Home screen
         composable(Screen.Home.route) {
             HomeScreen(
                 onAddCloneClick = {
+                    Timber.d("Navigating to app selection screen")
                     navController.navigate(Screen.AppSelection.route)
                 },
-                onCloneLaunch = { /* Handled in ViewModel */ },
+                onCloneLaunch = { cloneId ->
+                    Timber.d("Launching clone: $cloneId")
+                    // No navigation needed - the clone will be launched by the view model
+                },
                 onCloneInfo = { cloneId ->
-                    navController.navigate(Screen.CloneDetail.createRoute(cloneId))
+                    navController.navigate(Screen.createCloneDetailsRoute(cloneId))
                 },
                 onCloneSettings = { cloneId ->
-                    navController.navigate(Screen.CloneSettings.createRoute(cloneId))
+                    navController.navigate(Screen.createCloneDetailsRoute(cloneId))
                 },
                 onSettingsClick = {
                     navController.navigate(Screen.Settings.route)
@@ -75,46 +72,62 @@ fun AppNavigation(
             )
         }
         
-        // App selection screen - displays list of installed apps to clone
+        // App selection screen
         composable(Screen.AppSelection.route) {
             AppSelectionScreen(
                 onAppSelected = { packageName ->
-                    navController.navigate(Screen.CloneConfig.createRoute(packageName))
+                    Timber.d("Selected app: $packageName")
+                    navController.navigate(Screen.createCloneConfigRoute(packageName))
                 },
                 onBackClick = {
-                    navController.navigateUp()
+                    navController.popBackStack()
                 }
             )
         }
         
-        // Clone configuration screen - allows customization of clone
+        // Clone configuration screen
         composable(
-            route = Screen.CloneConfig.route,
+            route = Screen.CloneConfiguration.route,
             arguments = listOf(
-                navArgument("packageName") { type = NavType.StringType }
+                navArgument("packageName") {
+                    type = NavType.StringType
+                }
             )
         ) { backStackEntry ->
             val packageName = backStackEntry.arguments?.getString("packageName") ?: ""
             
-            CloneConfigScreen(
-                packageName = packageName,
-                onCloneCreated = {
-                    // Navigate back to home after clone is created
-                    navController.navigate(Screen.Home.route) {
-                        popUpTo(Screen.Home.route) { inclusive = true }
-                    }
-                },
-                onBackClick = {
-                    navController.navigateUp()
+            Timber.d("Configuring clone for package: $packageName")
+            
+            // TODO: Implement CloneConfigurationScreen
+            
+            // Temporarily, we'll just go back to home
+            navController.popBackStack(Screen.Home.route, false)
+        }
+        
+        // Clone details screen
+        composable(
+            route = Screen.CloneDetails.route,
+            arguments = listOf(
+                navArgument("cloneId") {
+                    type = NavType.StringType
                 }
             )
+        ) { backStackEntry ->
+            val cloneId = backStackEntry.arguments?.getString("cloneId") ?: ""
+            
+            Timber.d("Viewing clone details: $cloneId")
+            
+            // TODO: Implement CloneDetailsScreen
+            
+            // Temporarily, we'll just go back
+            navController.popBackStack()
         }
         
         // Settings screen
         composable(Screen.Settings.route) {
             SettingsScreen(
                 onBackClick = {
-                    navController.navigateUp()
+                    navController.popBackStack()
                 }
             )
         }
@@ -123,39 +136,9 @@ fun AppNavigation(
         composable(Screen.About.route) {
             AboutScreen(
                 onBackClick = {
-                    navController.navigateUp()
+                    navController.popBackStack()
                 }
             )
-        }
-        
-        // Clone detail screen
-        composable(
-            route = Screen.CloneDetail.route,
-            arguments = listOf(
-                navArgument("cloneId") { type = NavType.StringType }
-            )
-        ) { backStackEntry ->
-            val cloneId = backStackEntry.arguments?.getString("cloneId") ?: ""
-            
-            // TODO: Implement clone detail screen
-            
-            // For now, just navigate back when loaded
-            navController.navigateUp()
-        }
-        
-        // Clone settings screen
-        composable(
-            route = Screen.CloneSettings.route,
-            arguments = listOf(
-                navArgument("cloneId") { type = NavType.StringType }
-            )
-        ) { backStackEntry ->
-            val cloneId = backStackEntry.arguments?.getString("cloneId") ?: ""
-            
-            // TODO: Implement clone settings screen
-            
-            // For now, just navigate back when loaded
-            navController.navigateUp()
         }
     }
 }

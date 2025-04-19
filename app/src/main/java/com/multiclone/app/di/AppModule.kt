@@ -1,65 +1,38 @@
 package com.multiclone.app.di
 
 import android.content.Context
-import com.multiclone.app.core.virtualization.CloneEnvironment
-import com.multiclone.app.core.virtualization.ClonedAppInstaller
-import com.multiclone.app.core.virtualization.VirtualAppEngine
-import com.multiclone.app.data.repository.CloneRepository
+import com.multiclone.app.MultiCloneApplication
+import com.multiclone.app.core.virtualization.CloneManagerService
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import kotlinx.serialization.json.Json
 import javax.inject.Singleton
 
 /**
- * Dependency injection module for the app
+ * Main dependency injection module for the app
  */
 @Module
 @InstallIn(SingletonComponent::class)
 object AppModule {
-
+    
     /**
-     * Provides the repository for managing app clones
+     * Provides JSON instance for serialization
      */
     @Provides
     @Singleton
-    fun provideCloneRepository(
-        @ApplicationContext context: Context
-    ): CloneRepository {
-        return CloneRepository(context)
+    fun provideJson(): Json {
+        return MultiCloneApplication.json
     }
-
+    
     /**
-     * Provides the virtual app engine
+     * Provides the CloneManagerService wrapper
      */
     @Provides
     @Singleton
-    fun provideVirtualAppEngine(
-        @ApplicationContext context: Context
-    ): VirtualAppEngine {
-        return VirtualAppEngine(context)
-    }
-
-    /**
-     * Provides the clone environment
-     */
-    @Provides
-    @Singleton
-    fun provideCloneEnvironment(
-        @ApplicationContext context: Context
-    ): CloneEnvironment {
-        return CloneEnvironment(context)
-    }
-
-    /**
-     * Provides the cloned app installer
-     */
-    @Provides
-    @Singleton
-    fun provideClonedAppInstaller(
-        @ApplicationContext context: Context
-    ): ClonedAppInstaller {
-        return ClonedAppInstaller(context)
+    fun provideCloneManagerService(impl: CloneManagerService.Impl): CloneManagerService.Impl {
+        return impl
     }
 }

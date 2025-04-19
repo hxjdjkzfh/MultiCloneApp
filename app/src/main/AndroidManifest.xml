@@ -36,7 +36,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.MultiCloneApp"
         android:requestLegacyExternalStorage="true"
-        tools:targetApi="30">
+        tools:targetSdk="30">
         
         <activity
             android:name=".MainActivity"

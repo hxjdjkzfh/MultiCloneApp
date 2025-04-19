@@ -1,130 +1,210 @@
 package com.multiclone.app.core.virtualization
 
 import android.content.Context
-import android.content.pm.PackageInfo
+import android.content.Intent
 import android.content.pm.PackageManager
+import com.multiclone.app.data.model.CloneInfo
+import com.multiclone.app.data.repository.CloneRepository
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import timber.log.Timber
-import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Core engine for app virtualization
+ * Core engine for virtualizing applications
  */
 @Singleton
 class VirtualAppEngine @Inject constructor(
-    private val context: Context
+    private val context: Context,
+    private val cloneEnvironment: CloneEnvironment,
+    private val cloneRepository: CloneRepository,
+    private val clonedAppInstaller: ClonedAppInstaller
 ) {
-    // Root directory for storing virtualized app data
-    private val virtualAppRoot: File by lazy {
-        File(context.filesDir, "virtual")
-    }
-    
-    init {
-        // Ensure the virtual directory exists
-        if (!virtualAppRoot.exists()) {
-            virtualAppRoot.mkdirs()
-        }
+    /**
+     * Initialize the virtualization engine
+     */
+    suspend fun initialize(): Boolean = withContext(Dispatchers.IO) {
+        Timber.d("Initializing virtualization engine")
+        return@withContext cloneEnvironment.initialize()
     }
     
     /**
-     * Create a virtual clone of an app
+     * Check if the app can be cloned
      */
-    fun createClone(packageName: String, cloneId: String): String? {
+    suspend fun canCloneApp(packageName: String): Boolean = withContext(Dispatchers.IO) {
         try {
-            Timber.d("Creating virtual clone for package: $packageName with ID: $cloneId")
-            
-            // Get the original app info
-            val packageInfo = getPackageInfo(packageName) ?: return null
-            
-            // Create a directory for the clone
-            val cloneDir = File(virtualAppRoot, cloneId)
-            if (!cloneDir.exists()) {
-                cloneDir.mkdirs()
+            // Get the app package info
+            val packageInfo = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                context.packageManager.getPackageInfo(packageName, PackageManager.PackageInfoFlags.of(0))
+            } else {
+                @Suppress("DEPRECATION")
+                context.packageManager.getPackageInfo(packageName, 0)
             }
             
-            // Create a virtualization configuration file
-            val configFile = File(cloneDir, "config.json")
-            val config = """
-                {
-                    "originalPackage": "$packageName",
-                    "cloneId": "$cloneId",
-                    "versionCode": ${packageInfo.versionCode},
-                    "versionName": "${packageInfo.versionName}",
-                    "created": ${System.currentTimeMillis()}
-                }
-            """.trimIndent()
+            // Check if the app is installed
+            if (packageInfo == null) {
+                Timber.d("App not installed: $packageName")
+                return@withContext false
+            }
             
-            configFile.writeText(config)
+            // Check if we have already cloned this app too many times
+            val cloneCount = cloneRepository.getCloneCountForPackage(packageName)
+            if (cloneCount >= MAX_CLONES_PER_APP) {
+                Timber.d("Maximum clone limit reached for app: $packageName")
+                return@withContext false
+            }
             
-            // Return the path to the clone directory
-            return cloneDir.absolutePath
+            // Add more checks as needed (e.g., blacklisted apps, system apps, etc.)
+            
+            Timber.d("App can be cloned: $packageName")
+            return@withContext true
         } catch (e: Exception) {
-            Timber.e(e, "Error creating virtual clone for package: $packageName")
-            return null
+            Timber.e(e, "Error checking if app can be cloned: $packageName")
+            return@withContext false
         }
     }
     
     /**
-     * Get info for a cloned app
+     * Create a clone of an app
      */
-    fun getCloneInfo(cloneId: String): Map<String, Any>? {
+    suspend fun createClone(clone: CloneInfo): Boolean = withContext(Dispatchers.IO) {
+        Timber.d("Creating clone for ${clone.packageName}")
+        
         try {
-            val configFile = File(File(virtualAppRoot, cloneId), "config.json")
-            if (!configFile.exists()) {
-                return null
+            // 1. Prepare clone environment for this app
+            val environmentReady = cloneEnvironment.prepareAppEnvironment(clone.id, clone.packageName)
+            if (!environmentReady) {
+                Timber.d("Failed to prepare environment for clone: ${clone.id}")
+                return@withContext false
             }
             
-            // Parse the JSON config file and return it as a Map
-            val configJson = configFile.readText()
-            // In a real implementation, this would use a JSON parser
-            // For now, we'll return a simple map
+            // 2. Install the app in the virtual environment
+            val installResult = clonedAppInstaller.installApp(clone.id, clone.packageName)
+            if (!installResult) {
+                Timber.d("Failed to install app in virtual environment: ${clone.id}")
+                return@withContext false
+            }
             
-            return mapOf(
-                "cloneId" to cloneId,
-                "configPath" to configFile.absolutePath
-            )
+            // 3. Save the clone metadata
+            val saveResult = cloneRepository.saveClone(clone)
+            if (!saveResult) {
+                Timber.d("Failed to save clone metadata: ${clone.id}")
+                return@withContext false
+            }
+            
+            Timber.d("Successfully created clone: ${clone.id}")
+            return@withContext true
         } catch (e: Exception) {
-            Timber.e(e, "Error getting clone info for: $cloneId")
-            return null
+            Timber.e(e, "Error creating clone: ${clone.id}")
+            return@withContext false
         }
     }
     
     /**
-     * Delete a virtual clone
+     * Launch a cloned app
      */
-    fun deleteClone(cloneId: String): Boolean {
+    suspend fun launchApp(cloneId: String): Boolean = withContext(Dispatchers.IO) {
+        Timber.d("Launching cloned app: $cloneId")
+        
         try {
-            val cloneDir = File(virtualAppRoot, cloneId)
-            if (!cloneDir.exists()) {
-                Timber.w("Clone directory doesn't exist: $cloneId")
-                return true
+            // 1. Get the clone info
+            val clone = cloneRepository.getCloneById(cloneId)
+            if (clone == null) {
+                Timber.d("Clone not found: $cloneId")
+                return@withContext false
             }
             
-            // Recursively delete the clone directory
-            return cloneDir.deleteRecursively()
+            // 2. Create the launch intent for the proxy activity
+            val launchIntent = Intent(context, CloneProxyActivity::class.java).apply {
+                putExtra(EXTRA_CLONE_ID, cloneId)
+                putExtra(EXTRA_PACKAGE_NAME, clone.packageName)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            
+            // 3. Update the running state
+            cloneRepository.updateCloneRunningState(cloneId, true)
+            
+            // 4. Start the activity
+            context.startActivity(launchIntent)
+            
+            Timber.d("Launched cloned app: $cloneId")
+            return@withContext true
+        } catch (e: Exception) {
+            Timber.e(e, "Error launching cloned app: $cloneId")
+            return@withContext false
+        }
+    }
+    
+    /**
+     * Stop a running cloned app
+     */
+    suspend fun stopApp(cloneId: String): Boolean = withContext(Dispatchers.IO) {
+        Timber.d("Stopping cloned app: $cloneId")
+        
+        try {
+            // Update the running state
+            val result = cloneRepository.updateCloneRunningState(cloneId, false)
+            
+            // In a real implementation, we would actually force stop the app
+            // This would involve communicating with the service managing the virtual environment
+            
+            Timber.d("Stopped cloned app: $cloneId")
+            return@withContext result
+        } catch (e: Exception) {
+            Timber.e(e, "Error stopping cloned app: $cloneId")
+            return@withContext false
+        }
+    }
+    
+    /**
+     * Delete a cloned app
+     */
+    suspend fun deleteClone(cloneId: String): Boolean = withContext(Dispatchers.IO) {
+        Timber.d("Deleting cloned app: $cloneId")
+        
+        try {
+            // 1. Stop the app if it's running
+            if (cloneRepository.isCloneRunning(cloneId)) {
+                stopApp(cloneId)
+            }
+            
+            // 2. Clean up the virtual environment
+            val environmentCleaned = cloneEnvironment.cleanupAppEnvironment(cloneId)
+            if (!environmentCleaned) {
+                Timber.d("Failed to clean up environment for clone: $cloneId")
+                // Continue anyway to clean up the metadata
+            }
+            
+            // 3. Delete the clone metadata
+            val deleteResult = cloneRepository.deleteClone(cloneId)
+            if (!deleteResult) {
+                Timber.d("Failed to delete clone metadata: $cloneId")
+                return@withContext false
+            }
+            
+            Timber.d("Successfully deleted clone: $cloneId")
+            return@withContext true
         } catch (e: Exception) {
             Timber.e(e, "Error deleting clone: $cloneId")
-            return false
+            return@withContext false
         }
     }
     
-    /**
-     * Get package info for an app
-     */
-    private fun getPackageInfo(packageName: String): PackageInfo? {
-        return try {
-            context.packageManager.getPackageInfo(packageName, 0)
-        } catch (e: PackageManager.NameNotFoundException) {
-            Timber.e("Package not found: $packageName")
-            null
-        }
-    }
-    
-    /**
-     * Check if an app is installed
-     */
-    fun isAppInstalled(packageName: String): Boolean {
-        return getPackageInfo(packageName) != null
+    companion object {
+        /**
+         * Maximum number of clones per app
+         */
+        const val MAX_CLONES_PER_APP = 5
+        
+        /**
+         * Intent extra for clone ID
+         */
+        const val EXTRA_CLONE_ID = "extra_clone_id"
+        
+        /**
+         * Intent extra for package name
+         */
+        const val EXTRA_PACKAGE_NAME = "extra_package_name"
     }
 }

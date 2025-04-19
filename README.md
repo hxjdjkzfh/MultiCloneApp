@@ -1,6 +1,6 @@
 # MultiClone App
 
-An advanced Android application enabling seamless multi-profile app management with enhanced virtualization and isolation capabilities.
+An advanced Android application enabling seamless multi-profile app management with enhanced virtualization and isolation capabilities. Create multiple instances of your favorite apps without requiring root access!
 
 ## Features
 
@@ -9,6 +9,7 @@ An advanced Android application enabling seamless multi-profile app management w
 - **Customization**: Custom names and icons for each cloned app
 - **No Root Required**: Works without requiring root access
 - **Modern UI**: Material 3 design with smooth animations
+- **Background Services**: Manages app virtualization efficiently
 
 ## Technical Overview
 
@@ -18,7 +19,7 @@ MultiClone App is built using:
 - **MVVM Clean Architecture** for maintainable, testable code
 - **Jetpack Compose** for modern, declarative UI
 - **Material 3** design system for beautiful visuals
-- **Hilt** for dependency injection
+- **Coroutines & Flow** for asynchronous operations
 - **GitHub Actions** for CI/CD
 
 ## Architecture
@@ -26,9 +27,9 @@ MultiClone App is built using:
 The app follows Clean Architecture principles with distinct layers:
 
 ### UI Layer
-- **Screens**: HomeScreen, AppSelectionScreen, CloneConfigScreen, ClonesListScreen
-- **Components**: AppItem, CloneItem, LoadingOverlay
-- **ViewModels**: AppSelectionViewModel, CloneConfigViewModel, ClonesListViewModel
+- **Screens**: HomeScreen, AppSelectionScreen, SettingsScreen, AboutScreen
+- **Components**: AppItem, CloneItem, LoadingOverlay, ActionButton
+- **ViewModels**: HomeViewModel, AppSelectionViewModel, SettingsViewModel
 
 ### Domain Layer
 - **Use Cases**: GetInstalledAppsUseCase, CreateCloneUseCase, GetClonesUseCase, DeleteCloneUseCase, LaunchCloneUseCase
@@ -36,62 +37,82 @@ The app follows Clean Architecture principles with distinct layers:
 
 ### Data Layer
 - **Repositories**: AppRepository, CloneRepository
-- **Models**: AppInfo, CloneInfo
+- **Models**: AppInfo, CloneInfo with serialization support
+- **Storage**: Secure local storage for clone configurations
 
-### Core
-- **Virtualization**: VirtualAppEngine, CloneEnvironment, ClonedAppInstaller, VirtualAppManager, CloneProxyActivity, VirtualizationService, CloneManagerService
+### Core/Virtualization
+- **VirtualAppEngine**: Main virtualization orchestrator
+- **CloneEnvironment**: Manages isolated app environments
+- **ClonedAppInstaller**: Handles installation across environments
+- **CloneProxyActivity**: Intercepts app launches to route correctly
+- **VirtualizationService**: Background service for environment management
+- **CloneManagerService**: Handles clone lifecycle events
 
-## Virtualization Technology
+## Implementation Progress (April 2025)
 
-MultiClone uses advanced app virtualization to:
+- ✅ Completed all virtualization components in core package
+- ✅ Implemented Material Design 3 UI with animations
+- ✅ Created data models with serialization support
+- ✅ Built secure storage for clone configurations
+- ✅ Added GitHub workflow for CI/CD
+- ✅ Fixed Java compatibility (downgraded to Java 8)
+- ✅ Adjusted Gradle configuration for build environment compatibility
 
-1. Create isolated environments for each cloned app
-2. Redirect file system access to the isolated environment
-3. Manage environment lifecycle through a background service
-4. Proxy app launches to load the proper environment
-
-## Recent Implementation Progress
-
-As of April 2025:
-
-- ✅ Completed virtualization core components migration to core package
-- ✅ Implemented CloneEnvironment for virtual environment management
-- ✅ Created ClonedAppInstaller for handling app installation and updates
-- ✅ Enhanced VirtualAppEngine to use the new installer
-- ✅ Improved CloneProxyActivity with proper environment setup
-- ✅ Added VirtualAppManager for app lifecycle management
-- ✅ Created VirtualizationService for background operations
-- ✅ Updated repository methods for consistency
-
-## Building from Source
+## Setting Up Development Environment
 
 ### Prerequisites
 - Android Studio Arctic Fox or newer
-- JDK 11+
-- Android SDK 34+
+- JDK 8 compatibility
+- Android SDK 30
 
-### Steps
-1. Clone the repository
+### Build Configuration
+The project currently targets:
+- `compileSdk`: 30
+- `minSdk`: 21
+- `targetSdk`: 30
+
+We've needed to adjust from higher SDK versions due to build environment compatibility.
+
+## GitHub Setup
+
+### Pushing to GitHub
+1. Make sure you have a GitHub account and a personal access token with repo permissions
+2. Use our included script to push your code:
+
 ```bash
-git clone https://github.com/hxjdjkzfh/MiltiAppCloner.git
+# Make script executable
+chmod +x commit-and-push.sh
+
+# Run with your information
+./commit-and-push.sh YOUR_GITHUB_TOKEN YOUR_USERNAME YOUR_REPO_NAME
 ```
 
-2. Open the project in Android Studio
+Alternatively, you can run the script without arguments and it will prompt you for the required information.
 
-3. Build the app
+## Building and Running
+
 ```bash
+# Clean build
+./gradlew clean build
+
+# Build debug version
 ./gradlew assembleDebug
+
+# Install to connected device
+./gradlew installDebug
 ```
 
-The APK will be located at `app/build/outputs/apk/debug/app-debug.apk`
-
-## CI/CD
+## CI/CD Pipeline
 
 This project uses GitHub Actions for:
 
 - **Continuous Integration**: Building and testing on each commit
 - **APK Distribution**: Building both debug and release APKs
-- **Telegram Deployment**: Automatically sending builds to a Telegram chat
+- **Telegram Deployment**: Automatically sending builds to a Telegram chat (see setup-telegram-bot.md)
+
+## Contributions
+
+Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
