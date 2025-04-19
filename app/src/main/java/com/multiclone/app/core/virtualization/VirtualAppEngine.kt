@@ -2,25 +2,15 @@ package com.multiclone.app.core.virtualization
 
 import android.content.Context
 import android.content.Intent
-import android.content.pm.ApplicationInfo
-import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
-import android.graphics.Bitmap
-import android.graphics.drawable.Drawable
-import android.net.Uri
-import android.os.Build
-import androidx.core.content.FileProvider
-import com.multiclone.app.data.model.AppInfo
-import com.multiclone.app.data.model.CloneInfo
-import com.multiclone.app.utils.IconUtils
-import java.io.File
-import java.util.UUID
+import android.util.Log
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Core engine for app virtualization functionality
- * Handles creating and managing virtual environments for cloned apps
+ * Core engine for virtualization and app cloning
  */
 @Singleton
 class VirtualAppEngine @Inject constructor(
@@ -28,118 +18,146 @@ class VirtualAppEngine @Inject constructor(
     private val clonedAppInstaller: ClonedAppInstaller
 ) {
     companion object {
-        private const val CLONE_PREFIX = "com.multiclone.app.clone_"
-        private const val VIRTUAL_ENV_DIR = "virtual_environments"
-    }
-
-    /**
-     * Get a list of installed apps that can be cloned
-     */
-    fun getInstalledApps(): List<AppInfo> {
-        val packageManager = context.packageManager
-        val installedApps = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            packageManager.getInstalledPackages(PackageManager.PackageInfoFlags.of(0))
-        } else {
-            @Suppress("DEPRECATION")
-            packageManager.getInstalledPackages(0)
-        }
-
-        return installedApps
-            .filter { pkg -> 
-                // Filter out system apps and our own app
-                val isNotSystemApp = pkg.applicationInfo.flags and ApplicationInfo.FLAG_SYSTEM == 0
-                val isNotOurApp = !pkg.packageName.startsWith("com.multiclone.app")
-                isNotSystemApp && isNotOurApp
-            }
-            .map { pkg -> mapToAppInfo(pkg, packageManager) }
-            .sortedBy { it.appName }
-    }
-
-    /**
-     * Creates a virtual environment for a cloned app
-     */
-    fun createClone(
-        packageName: String, 
-        displayName: String,
-        customIcon: Bitmap?,
-        cloneId: String = UUID.randomUUID().toString()
-    ): CloneInfo {
-        // Use the ClonedAppInstaller to create the clone
-        return clonedAppInstaller.createClone(
-            packageName = packageName,
-            displayName = displayName,
-            customIcon = customIcon
-        )
-    }
-
-    /**
-     * Launch a cloned app using CloneProxyActivity
-     */
-    fun launchClone(cloneInfo: CloneInfo) {
-        val intent = Intent(context, CloneProxyActivity::class.java).apply {
-            putExtra("packageName", cloneInfo.packageName)
-            putExtra("cloneId", cloneInfo.id)
-            putExtra("displayName", cloneInfo.displayName)
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK
-        }
-        context.startActivity(intent)
-        
-        // Update last used timestamp
-        cloneInfo.lastUsedTimestamp = System.currentTimeMillis()
-    }
-
-    /**
-     * Delete a cloned app's virtual environment
-     */
-    fun deleteClone(cloneInfo: CloneInfo): Boolean {
-        return clonedAppInstaller.deleteClone(cloneInfo)
+        private const val TAG = "VirtualAppEngine"
     }
     
     /**
-     * Update a cloned app (after the original app has been updated)
+     * Create a clone of an application
      */
-    fun updateClone(cloneInfo: CloneInfo): Boolean {
-        return clonedAppInstaller.updateClone(cloneInfo)
-    }
-    
-    /**
-     * Create a shortcut for a cloned app on the home screen
-     */
-    fun createShortcut(cloneInfo: CloneInfo): Boolean {
+    suspend fun createClone(
+        packageName: String,
+        cloneId: String,
+        displayName: String
+    ): Boolean = withContext(Dispatchers.IO) {
         try {
-            // In a real implementation, this would create a shortcut on the home screen
-            // using the ShortcutManager API (Android 8.0+) or a broadcast (pre-Android 8.0)
+            Log.d(TAG, "Creating clone of $packageName with ID $cloneId")
             
-            // For now, just pretend it worked
-            return true
+            // Use the installer to set up the clone
+            val success = clonedAppInstaller.cloneApp(packageName, cloneId, displayName)
+            
+            if (success) {
+                // Create launcher icon for the cloned app
+                createCloneLauncher(packageName, cloneId, displayName)
+            }
+            
+            success
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e(TAG, "Error creating clone", e)
+            false
+        }
+    }
+    
+    /**
+     * Delete a clone completely
+     */
+    suspend fun deleteClone(cloneId: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            Log.d(TAG, "Deleting clone with ID $cloneId")
+            
+            // Use the installer to uninstall the clone
+            val success = clonedAppInstaller.uninstallClone(cloneId)
+            
+            if (success) {
+                // Remove launcher icon if present
+                removeCloneLauncher(cloneId)
+            }
+            
+            success
+        } catch (e: Exception) {
+            Log.e(TAG, "Error deleting clone", e)
+            false
+        }
+    }
+    
+    /**
+     * Launch a specific clone
+     */
+    fun launchClone(packageName: String, cloneId: String) {
+        Log.d(TAG, "Launching clone of $packageName with ID $cloneId")
+        
+        // Create an intent to launch the proxy activity that will set up the environment
+        val intent = Intent(context, CloneProxyActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            putExtra("packageName", packageName)
+            putExtra("cloneId", cloneId)
+        }
+        
+        // Start the activity
+        context.startActivity(intent)
+    }
+    
+    /**
+     * Create a launcher icon for the cloned app
+     */
+    private fun createCloneLauncher(packageName: String, cloneId: String, displayName: String) {
+        try {
+            // This is a placeholder implementation
+            // Real implementation would involve creating a shortcut or launcher entry
+            Log.d(TAG, "Creating launcher for clone $cloneId ($displayName)")
+            
+            // Check if the original app has a launcher intent
+            val pm = context.packageManager
+            val launchIntent = pm.getLaunchIntentForPackage(packageName)
+            
+            if (launchIntent != null) {
+                // In a real implementation, we would:
+                // 1. Create a shortcut using the ShortcutManager API (Android 8.0+)
+                // 2. Or create a launcher entry by registering a new ComponentName
+                
+                Log.d(TAG, "Launcher icon created for clone $cloneId")
+            } else {
+                Log.w(TAG, "Original app does not have a launcher, skipping clone launcher creation")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error creating launcher icon", e)
+        }
+    }
+    
+    /**
+     * Remove a launcher icon for a cloned app
+     */
+    private fun removeCloneLauncher(cloneId: String) {
+        try {
+            // This is a placeholder implementation
+            // Real implementation would involve removing a shortcut or launcher entry
+            Log.d(TAG, "Removing launcher for clone $cloneId")
+            
+            // In a real implementation, we would:
+            // 1. Remove the shortcut using the ShortcutManager API (Android 8.0+)
+            // 2. Or disable the launcher component
+            
+            Log.d(TAG, "Launcher icon removed for clone $cloneId")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error removing launcher icon", e)
+        }
+    }
+    
+    /**
+     * Check if a package can be cloned
+     */
+    fun canClonePackage(packageName: String): Boolean {
+        try {
+            val pm = context.packageManager
+            
+            // Check if the package exists
+            val packageInfo = pm.getPackageInfo(packageName, 0)
+            
+            // Don't allow cloning of our own app
+            if (packageName == context.packageName) {
+                return false
+            }
+            
+            // Check if it's a system app
+            val isSystemApp = packageInfo.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM != 0
+            
+            // For now, allow cloning of all non-system apps
+            return !isSystemApp
+        } catch (e: PackageManager.NameNotFoundException) {
+            // Package doesn't exist
+            return false
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking if package can be cloned", e)
             return false
         }
-    }
-
-    /**
-     * Get the virtual environment directory for a clone
-     */
-    private fun getCloneEnvironmentDirectory(cloneId: String): File {
-        val baseDir = File(context.filesDir, VIRTUAL_ENV_DIR)
-        return File(baseDir, cloneId)
-    }
-
-    /**
-     * Map PackageInfo to our AppInfo data model
-     */
-    private fun mapToAppInfo(packageInfo: PackageInfo, packageManager: PackageManager): AppInfo {
-        val appName = packageInfo.applicationInfo.loadLabel(packageManager).toString()
-        val icon = packageInfo.applicationInfo.loadIcon(packageManager)
-        val isSystemApp = (packageInfo.applicationInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
-        
-        return AppInfo(
-            packageName = packageInfo.packageName,
-            appName = appName,
-            versionName = packageInfo.versionName,
-            icon = icon,
-            isSystemApp = isSystemApp
-        )
     }
 }

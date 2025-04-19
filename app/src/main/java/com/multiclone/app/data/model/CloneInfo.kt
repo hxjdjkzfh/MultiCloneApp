@@ -1,21 +1,38 @@
 package com.multiclone.app.data.model
 
-import android.graphics.Bitmap
-import android.os.Parcelable
-import kotlinx.parcelize.Parcelize
-import kotlinx.parcelize.RawValue
+import android.graphics.drawable.Drawable
 
 /**
- * Data model representing a cloned application
+ * Represents information about a cloned application
  */
-@Parcelize
 data class CloneInfo(
+    // Unique identifier for this clone
     val id: String,
+    
+    // Package name of the original app
     val packageName: String,
-    val originalAppName: String,
+    
+    // Custom display name for this clone
     val displayName: String,
-    val customIcon: @RawValue Bitmap?,
-    val virtualEnvironmentId: String,
-    val creationTimestamp: Long,
-    var lastUsedTimestamp: Long
-) : Parcelable
+    
+    // Custom icon for this clone (null means use original app icon)
+    val customIcon: Drawable? = null,
+    
+    // Original app icon
+    val originalIcon: Drawable? = null,
+    
+    // Time when this clone was created
+    val creationTime: Long,
+    
+    // Time when this clone was last used
+    val lastUsedTime: Long,
+    
+    // User-defined color for this clone (used for UI/theming)
+    val colorHex: String? = null,
+    
+    // Whether notifications are enabled for this clone
+    val notificationsEnabled: Boolean = true,
+    
+    // Whether this clone is frozen (won't receive updates)
+    val isFrozen: Boolean = false
+)

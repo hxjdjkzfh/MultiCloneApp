@@ -2,125 +2,163 @@ package com.multiclone.app.core.virtualization
 
 import android.content.Context
 import android.content.pm.ApplicationInfo
-import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
-import android.graphics.Bitmap
-import androidx.core.content.pm.PackageInfoCompat
-import com.multiclone.app.data.model.CloneInfo
+import android.graphics.drawable.Drawable
+import android.util.Log
+import com.multiclone.app.data.model.AppInfo
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
-import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Handles the installation of cloned apps
- * This class creates the necessary infrastructure for running a cloned app
+ * Handles the installation and management of cloned apps
  */
 @Singleton
 class ClonedAppInstaller @Inject constructor(
     private val context: Context
 ) {
     companion object {
-        private const val VIRTUAL_ENV_DIR = "virtual_environments"
+        private const val TAG = "ClonedAppInstaller"
     }
     
     /**
-     * Create a new clone of the given package
+     * Get list of installed applications that can be cloned
      */
-    fun createClone(
-        packageName: String,
-        displayName: String,
-        customIcon: Bitmap? = null
-    ): CloneInfo {
-        // Get information about the original app
-        val packageInfo = context.packageManager.getPackageInfo(packageName, 0)
-        val applicationInfo = packageInfo.applicationInfo
-        val originalAppName = applicationInfo.loadLabel(context.packageManager).toString()
+    suspend fun getInstalledApps(): List<AppInfo> = withContext(Dispatchers.IO) {
+        val pm = context.packageManager
+        val installedApps = mutableListOf<AppInfo>()
         
-        // Generate unique IDs for the clone
-        val cloneId = UUID.randomUUID().toString()
-        val virtualEnvId = UUID.randomUUID().toString()
+        // Get all installed apps
+        val packages = pm.getInstalledApplications(PackageManager.GET_META_DATA)
         
-        // Create virtual environment
-        val environment = CloneEnvironment(
-            context = context,
-            cloneId = cloneId,
-            packageName = packageName,
-            displayName = displayName
-        )
-        environment.initialize()
-        
-        // Copy necessary app data to the virtual environment
-        copyAppData(applicationInfo, environment)
-        
-        // Create the CloneInfo object
-        return CloneInfo(
-            id = cloneId,
-            packageName = packageName,
-            originalAppName = originalAppName,
-            displayName = displayName,
-            customIcon = customIcon,
-            virtualEnvironmentId = virtualEnvId,
-            creationTimestamp = System.currentTimeMillis(),
-            lastUsedTimestamp = System.currentTimeMillis()
-        )
-    }
-    
-    /**
-     * Delete a cloned app
-     */
-    fun deleteClone(cloneInfo: CloneInfo): Boolean {
-        val environment = CloneEnvironment(
-            context = context,
-            cloneId = cloneInfo.id,
-            packageName = cloneInfo.packageName,
-            displayName = cloneInfo.displayName
-        )
-        
-        return environment.delete()
-    }
-    
-    /**
-     * Update a cloned app (after the original app has been updated)
-     */
-    fun updateClone(cloneInfo: CloneInfo): Boolean {
-        try {
-            // Get updated information about the original app
-            val packageInfo = context.packageManager.getPackageInfo(cloneInfo.packageName, 0)
-            val applicationInfo = packageInfo.applicationInfo
+        // Filter out system apps and our own app
+        for (appInfo in packages) {
+            // Skip system apps 
+            if (appInfo.flags and ApplicationInfo.FLAG_SYSTEM != 0) {
+                continue
+            }
             
-            // Get the virtual environment
-            val environment = CloneEnvironment(
-                context = context,
-                cloneId = cloneInfo.id,
-                packageName = cloneInfo.packageName,
-                displayName = cloneInfo.displayName
+            // Skip our own app
+            if (appInfo.packageName == context.packageName) {
+                continue
+            }
+            
+            // Get app name
+            val appName = pm.getApplicationLabel(appInfo).toString()
+            
+            // Get app icon
+            val appIcon = try {
+                pm.getApplicationIcon(appInfo.packageName)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error loading icon for ${appInfo.packageName}", e)
+                null
+            }
+            
+            // Add to list
+            installedApps.add(
+                AppInfo(
+                    packageName = appInfo.packageName,
+                    appName = appName,
+                    icon = appIcon,
+                    sourceDir = appInfo.sourceDir,
+                    isSystem = false
+                )
             )
+        }
+        
+        // Return sorted by name
+        installedApps.sortedBy { it.appName }
+    }
+    
+    /**
+     * Clone an app with the given parameters
+     */
+    suspend fun cloneApp(
+        packageName: String, 
+        cloneId: String, 
+        displayName: String
+    ): Boolean = withContext(Dispatchers.IO) {
+        try {
+            Log.d(TAG, "Cloning app: $packageName with ID: $cloneId")
             
-            // Update necessary files in the virtual environment
-            copyAppData(applicationInfo, environment)
+            // Get the app info
+            val pm = context.packageManager
+            val appInfo = pm.getApplicationInfo(packageName, 0)
             
-            return true
+            // Create directories for the clone
+            val cloneDir = File(context.getDir("clones", Context.MODE_PRIVATE), cloneId)
+            if (!cloneDir.exists()) {
+                cloneDir.mkdirs()
+            }
+            
+            // Create data directories
+            val dataDir = File(cloneDir, "data")
+            dataDir.mkdirs()
+            
+            // Copy necessary files and configuration
+            copyAppResources(appInfo, cloneDir)
+            
+            // Generate configuration for the virtual environment
+            createVirtualConfig(cloneDir, packageName, displayName)
+            
+            true
         } catch (e: Exception) {
-            e.printStackTrace()
-            return false
+            Log.e(TAG, "Error cloning app", e)
+            false
         }
     }
     
     /**
-     * Copy necessary data from the original app to the virtual environment
+     * Copy necessary resources from the original app
      */
-    private fun copyAppData(applicationInfo: ApplicationInfo, environment: CloneEnvironment) {
-        // In a real implementation, this would:
-        // 1. Copy APK file (if needed)
-        // 2. Extract and modify manifest
-        // 3. Setup resource redirection
-        // 4. Setup storage isolation
+    private fun copyAppResources(appInfo: ApplicationInfo, targetDir: File) {
+        // This would copy necessary resources, but the actual implementation
+        // depends on the virtualization approach being used
+        Log.d(TAG, "Copying resources for ${appInfo.packageName}")
+    }
+    
+    /**
+     * Create configuration for the virtual environment
+     */
+    private fun createVirtualConfig(cloneDir: File, packageName: String, displayName: String) {
+        // Create a configuration file for this clone
+        val configFile = File(cloneDir, "config.json")
         
-        // For this demo, we'll just create a placeholder file
-        val placeholderFile = File(environment.filesDir, "app_info.txt")
-        placeholderFile.writeText("Original Package: ${applicationInfo.packageName}\n" +
-                              "Virtual Environment ID: ${environment.cloneId}\n" +
-                              "Created on: ${System.currentTimeMillis()}")
+        // Write basic configuration (in a real implementation, this would be a proper JSON)
+        configFile.writeText("""
+            {
+                "packageName": "$packageName",
+                "displayName": "$displayName",
+                "createdAt": ${System.currentTimeMillis()},
+                "version": 1
+            }
+        """.trimIndent())
+        
+        Log.d(TAG, "Created virtual config for $packageName")
+    }
+    
+    /**
+     * Uninstall/remove a cloned app
+     */
+    suspend fun uninstallClone(cloneId: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            // Get the clone directory
+            val cloneDir = File(context.getDir("clones", Context.MODE_PRIVATE), cloneId)
+            
+            if (cloneDir.exists()) {
+                // Delete clone directory recursively
+                cloneDir.deleteRecursively()
+                Log.d(TAG, "Uninstalled clone: $cloneId")
+                true
+            } else {
+                Log.w(TAG, "Clone directory not found: $cloneId")
+                false
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error uninstalling clone", e)
+            false
+        }
     }
 }
