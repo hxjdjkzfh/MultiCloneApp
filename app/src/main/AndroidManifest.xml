@@ -85,6 +85,12 @@
             android:name=".core.virtualization.CloneManagerService"
             android:exported="false" />
             
+        <!-- Virtualization service for handling app isolation -->
+        <service
+            android:name=".core.virtualization.VirtualizationService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+            
     </application>
 
 </manifest>

@@ -12,7 +12,7 @@ import kotlinx.parcelize.RawValue
 data class AppInfo(
     val packageName: String,
     val appName: String,
-    val versionName: String?,
+    val versionName: String,
     val icon: @RawValue Drawable,
     val isSystemApp: Boolean
 ) : Parcelable

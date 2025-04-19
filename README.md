@@ -39,7 +39,7 @@ The app follows Clean Architecture principles with distinct layers:
 - **Models**: AppInfo, CloneInfo
 
 ### Core
-- **Virtualization**: VirtualAppEngine, CloneProxyActivity, CloneManagerService
+- **Virtualization**: VirtualAppEngine, CloneEnvironment, ClonedAppInstaller, VirtualAppManager, CloneProxyActivity, VirtualizationService, CloneManagerService
 
 ## Virtualization Technology
 
@@ -49,6 +49,19 @@ MultiClone uses advanced app virtualization to:
 2. Redirect file system access to the isolated environment
 3. Manage environment lifecycle through a background service
 4. Proxy app launches to load the proper environment
+
+## Recent Implementation Progress
+
+As of April 2025:
+
+- ✅ Completed virtualization core components migration to core package
+- ✅ Implemented CloneEnvironment for virtual environment management
+- ✅ Created ClonedAppInstaller for handling app installation and updates
+- ✅ Enhanced VirtualAppEngine to use the new installer
+- ✅ Improved CloneProxyActivity with proper environment setup
+- ✅ Added VirtualAppManager for app lifecycle management
+- ✅ Created VirtualizationService for background operations
+- ✅ Updated repository methods for consistency
 
 ## Building from Source
 

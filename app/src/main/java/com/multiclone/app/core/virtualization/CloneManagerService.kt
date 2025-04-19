@@ -10,146 +10,161 @@ import android.os.Binder
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import com.multiclone.app.R
+import com.multiclone.app.data.model.CloneInfo
+import com.multiclone.app.data.repository.CloneRepository
 import dagger.hilt.android.AndroidEntryPoint
-import java.io.File
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
- * A background service that manages virtual environments for cloned apps
- * This service handles the lifecycle of cloned app environments and
- * provides the necessary isolation for each cloned app instance
+ * Service for managing cloned applications
+ * Handles operations like updating, launching, and monitoring clones
  */
 @AndroidEntryPoint
 class CloneManagerService : Service() {
-
+    
     companion object {
-        private const val NOTIFICATION_CHANNEL_ID = "virtual_app_service"
-        private const val NOTIFICATION_ID = 1001
-        private const val VIRTUAL_ENV_DIR = "virtual_environments"
+        private const val NOTIFICATION_ID = 1002
+        private const val CHANNEL_ID = "clone_manager_channel"
+        
+        // Intent actions
+        const val ACTION_UPDATE_CLONES = "com.multiclone.app.ACTION_UPDATE_CLONES"
+        const val ACTION_CHECK_UPDATES = "com.multiclone.app.ACTION_CHECK_UPDATES"
     }
-
-    @Inject
-    lateinit var virtualAppEngine: VirtualAppEngine
-
+    
+    // Binder for local service connection
     private val binder = LocalBinder()
-    private val activeEnvironments = mutableMapOf<String, VirtualEnvironment>()
-
     inner class LocalBinder : Binder() {
         fun getService(): CloneManagerService = this@CloneManagerService
     }
-
-    inner class VirtualEnvironment(
-        val packageName: String,
-        val cloneId: String,
-        val displayName: String
-    ) {
-        val baseDir: File = File(getDir(VIRTUAL_ENV_DIR, Context.MODE_PRIVATE), cloneId)
-        
-        init {
-            baseDir.mkdirs()
-        }
-        
-        fun prepare() {
-            // Set up the virtual environment
-            // This would include:
-            // - Setting up file redirection
-            // - Preparing shared preferences
-            // - Initializing database proxy
-            // - Other isolation mechanisms
-        }
-        
-        fun cleanup() {
-            // Perform cleanup when the environment is no longer needed
-        }
-    }
-
+    
+    @Inject
+    lateinit var cloneRepository: CloneRepository
+    
+    @Inject
+    lateinit var virtualAppEngine: VirtualAppEngine
+    
+    // Coroutine scope for service operations
+    private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    
+    // Currently active clones
+    private val activeClones = mutableMapOf<String, CloneInfo>()
+    
     override fun onCreate() {
         super.onCreate()
+        
+        // Create notification channel for Android 8.0+
         createNotificationChannel()
+        
+        // Start as a foreground service
         startForeground(NOTIFICATION_ID, createNotification())
     }
-
+    
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // Keep service running
+        intent?.let { handleIntent(it) }
         return START_STICKY
     }
-
+    
     override fun onBind(intent: Intent?): IBinder {
         return binder
     }
-
-    /**
-     * Get or create a virtual environment for a clone
-     */
-    fun getEnvironment(packageName: String, cloneId: String, displayName: String): VirtualEnvironment {
-        // Return existing environment or create a new one
-        return activeEnvironments.getOrPut(cloneId) {
-            VirtualEnvironment(packageName, cloneId, displayName).apply {
-                prepare()
-            }
-        }
-    }
-
-    /**
-     * Release a virtual environment when it's no longer needed
-     */
-    fun releaseEnvironment(cloneId: String) {
-        activeEnvironments[cloneId]?.cleanup()
-        activeEnvironments.remove(cloneId)
+    
+    override fun onDestroy() {
+        // Cancel all coroutines when service is destroyed
+        serviceScope.cancel()
+        super.onDestroy()
     }
     
     /**
-     * Start a clone session for a particular app
+     * Handle various service intents
      */
-    fun startCloneSession(cloneInfo: com.multiclone.app.data.model.CloneInfo): Boolean {
-        try {
-            // Get the environment for this clone
-            val environment = getEnvironment(
-                cloneInfo.packageName,
-                cloneInfo.id,
-                cloneInfo.displayName
-            )
-            
-            // In a full implementation, this would set up redirection,
-            // prepare the sandbox, etc.
-            
-            return true
-        } catch (e: Exception) {
-            e.printStackTrace()
-            return false
+    private fun handleIntent(intent: Intent) {
+        when (intent.action) {
+            ACTION_UPDATE_CLONES -> {
+                serviceScope.launch {
+                    updateAllClones()
+                }
+            }
+            ACTION_CHECK_UPDATES -> {
+                serviceScope.launch {
+                    checkForUpdates()
+                }
+            }
         }
     }
-
+    
+    /**
+     * Update all clones after their original apps have been updated
+     */
+    private suspend fun updateAllClones() {
+        val clones = cloneRepository.getClones()
+        for (clone in clones) {
+            virtualAppEngine.updateClone(clone)
+        }
+    }
+    
+    /**
+     * Check if any installed clones need updates
+     */
+    private fun checkForUpdates() {
+        // In a real implementation, this would check for original app updates
+        // and notify the user if updates are available
+    }
+    
+    /**
+     * Register an active clone
+     */
+    fun registerActiveClone(cloneId: String) {
+        serviceScope.launch {
+            val clone = cloneRepository.getCloneById(cloneId)
+            clone?.let {
+                activeClones[cloneId] = it
+                // Update UI or perform other operations as needed
+            }
+        }
+    }
+    
+    /**
+     * Unregister an active clone
+     */
+    fun unregisterActiveClone(cloneId: String) {
+        activeClones.remove(cloneId)
+    }
+    
+    /**
+     * Create a notification channel for Android 8.0+
+     */
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
-                NOTIFICATION_CHANNEL_ID,
-                "Virtual App Service",
+                CHANNEL_ID,
+                "Clone Manager Service",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Manages virtual environments for cloned apps"
+                description = "Manages clone updates and status"
                 setShowBadge(false)
             }
             
-            val notificationManager = getSystemService(NotificationManager::class.java)
+            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             notificationManager.createNotificationChannel(channel)
         }
     }
-
-    private fun createNotification(): Notification {
-        return NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
-            .setContentTitle("MultiClone App")
-            .setContentText("Managing cloned applications")
-            .setSmallIcon(android.R.drawable.ic_menu_share) // Placeholder icon
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setCategory(NotificationCompat.CATEGORY_SERVICE)
-            .build()
-    }
     
-    override fun onDestroy() {
-        // Clean up all active environments
-        activeEnvironments.values.forEach { it.cleanup() }
-        activeEnvironments.clear()
-        super.onDestroy()
+    /**
+     * Create a notification for foreground service
+     */
+    private fun createNotification(): Notification {
+        return NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("MultiClone Manager")
+            .setContentText("Managing your cloned apps")
+            .setSmallIcon(R.drawable.ic_notification)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setOngoing(true)
+            .build()
     }
 }
