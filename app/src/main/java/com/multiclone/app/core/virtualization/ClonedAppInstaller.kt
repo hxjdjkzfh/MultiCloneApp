@@ -1,100 +1,99 @@
 package com.multiclone.app.core.virtualization
 
 import android.content.Context
-import android.content.pm.ApplicationInfo
-import android.content.pm.PackageManager
-import android.graphics.drawable.Drawable
+import android.content.Intent
+import android.net.Uri
 import com.multiclone.app.data.model.AppInfo
-import dagger.hilt.android.qualifiers.ApplicationContext
+import com.multiclone.app.data.model.CloneInfo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import javax.inject.Inject
-import javax.inject.Singleton
+import java.io.File
 
 /**
  * Handles installation of cloned apps
  */
-@Singleton
-class ClonedAppInstaller @Inject constructor(
-    @ApplicationContext private val context: Context
-) {
+class ClonedAppInstaller(private val context: Context) {
+    
+    companion object {
+        const val CLONES_DIRECTORY = "app_clones"
+    }
     
     /**
-     * Get a list of all installed apps that can be cloned
+     * Prepares the environment for a cloned app
+     * Returns the directory where the clone data will be stored
      */
-    suspend fun getInstalledApps(): List<AppInfo> = withContext(Dispatchers.IO) {
-        val packageManager = context.packageManager
-        val installedPackages = packageManager.getInstalledPackages(0)
+    fun prepareCloneEnvironment(cloneInfo: CloneInfo): File {
+        // Create a dedicated directory for this clone
+        val cloneDir = File(context.filesDir, "$CLONES_DIRECTORY/${cloneInfo.id}")
+        if (!cloneDir.exists()) {
+            cloneDir.mkdirs()
+        }
         
-        return@withContext installedPackages
-            .filter { packageInfo ->
-                // Filter out system apps and our own app
-                val isSystemApp = packageInfo.applicationInfo.flags and ApplicationInfo.FLAG_SYSTEM != 0
-                val isOurApp = packageInfo.packageName == context.packageName
-                
-                !isSystemApp && !isOurApp && packageManager.getLaunchIntentForPackage(packageInfo.packageName) != null
-            }
-            .map { packageInfo ->
-                val appName = packageManager.getApplicationLabel(packageInfo.applicationInfo).toString()
-                val icon = packageManager.getApplicationIcon(packageInfo.packageName)
-                val sourceDir = packageInfo.applicationInfo.sourceDir
-                val isSystemApp = packageInfo.applicationInfo.flags and ApplicationInfo.FLAG_SYSTEM != 0
-                
-                AppInfo(
-                    packageName = packageInfo.packageName,
-                    appName = appName,
-                    icon = icon,
-                    sourceDir = sourceDir,
-                    isSystem = isSystemApp
-                )
-            }
-            .sortedBy { it.appName.lowercase() }
+        // Create subdirectories for app data
+        File(cloneDir, "files").mkdirs()
+        File(cloneDir, "cache").mkdirs()
+        File(cloneDir, "databases").mkdirs()
+        File(cloneDir, "shared_prefs").mkdirs()
+        
+        return cloneDir
     }
     
     /**
-     * Get icon for a package
+     * Installs a clone of the specified app
      */
-    fun getAppIcon(packageName: String): Drawable? {
-        return try {
-            context.packageManager.getApplicationIcon(packageName)
-        } catch (e: PackageManager.NameNotFoundException) {
-            null
-        }
-    }
-    
-    /**
-     * Get app info for a package
-     */
-    fun getAppInfo(packageName: String): AppInfo? {
-        return try {
-            val packageManager = context.packageManager
-            val applicationInfo = packageManager.getApplicationInfo(packageName, 0)
-            val appName = packageManager.getApplicationLabel(applicationInfo).toString()
-            val icon = packageManager.getApplicationIcon(packageName)
-            val sourceDir = applicationInfo.sourceDir
-            val isSystemApp = applicationInfo.flags and ApplicationInfo.FLAG_SYSTEM != 0
+    suspend fun installClone(appInfo: AppInfo, cloneInfo: CloneInfo) = withContext(Dispatchers.IO) {
+        try {
+            // Copy original app's files to the clone directory
+            // Note: In a real implementation, this would involve complex APK extraction and modification
             
-            AppInfo(
-                packageName = packageName,
-                appName = appName,
-                icon = icon,
-                sourceDir = sourceDir,
-                isSystem = isSystemApp
-            )
+            // Create a shortcut for the clone
+            createShortcut(cloneInfo)
+            
+            // Start VirtualizationService to manage the clone's lifecycle
+            startVirtualizationService(cloneInfo)
+            
+            return@withContext true
         } catch (e: Exception) {
-            null
+            e.printStackTrace()
+            return@withContext false
         }
     }
     
     /**
-     * Check if a package is installed
+     * Creates a shortcut for the cloned app on the home screen
      */
-    fun isPackageInstalled(packageName: String): Boolean {
-        return try {
-            context.packageManager.getApplicationInfo(packageName, 0)
-            true
-        } catch (e: PackageManager.NameNotFoundException) {
-            false
+    private fun createShortcut(cloneInfo: CloneInfo) {
+        val shortcutIntent = Intent(context, CloneProxyActivity::class.java).apply {
+            action = Intent.ACTION_MAIN
+            putExtra("clone_id", cloneInfo.id)
+            putExtra("package_name", cloneInfo.packageName)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            addCategory(Intent.CATEGORY_LAUNCHER)
         }
+        
+        val installShortcutIntent = Intent("com.android.launcher.action.INSTALL_SHORTCUT").apply {
+            putExtra(Intent.EXTRA_SHORTCUT_INTENT, shortcutIntent)
+            putExtra(Intent.EXTRA_SHORTCUT_NAME, cloneInfo.displayName)
+            putExtra("duplicate", false)
+            
+            // Use the original app's icon for now
+            // In a real app, we would customize the icon to indicate it's a clone
+            val iconUri = Uri.parse("android.resource://${cloneInfo.packageName}/mipmap/ic_launcher")
+            putExtra(Intent.EXTRA_SHORTCUT_ICON_RESOURCE, Intent.ShortcutIconResource.fromContext(context, android.R.drawable.sym_def_app_icon))
+        }
+        
+        context.sendBroadcast(installShortcutIntent)
+    }
+    
+    /**
+     * Starts the virtualization service for a cloned app
+     */
+    private fun startVirtualizationService(cloneInfo: CloneInfo) {
+        val serviceIntent = Intent(context, VirtualizationService::class.java).apply {
+            putExtra("clone_id", cloneInfo.id)
+            putExtra("package_name", cloneInfo.packageName)
+        }
+        context.startService(serviceIntent)
     }
 }

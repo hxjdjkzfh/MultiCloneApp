@@ -54,7 +54,7 @@ jobs:
     
     - name: Decode Keystore File
       run: echo "${{ secrets.SIGNING_KEY }}" | base64 -d > keystore/release.keystore
-      if: ${{ secrets.SIGNING_KEY != '' }}
+      if: "${{ secrets.SIGNING_KEY != '' }}"
       
     - name: Set SIGNING_ environment variables
       run: |
@@ -87,7 +87,7 @@ jobs:
     - name: Sign Release APK
       uses: r0adkll/sign-android-release@v1
       id: sign_app
-      if: ${{ secrets.SIGNING_KEY != '' }}
+      if: "${{ secrets.SIGNING_KEY != '' }}"
       with:
         releaseDirectory: app/build/outputs/apk/release
         signingKeyBase64: ${{ secrets.SIGNING_KEY }}

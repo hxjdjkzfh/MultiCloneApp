@@ -1,55 +1,56 @@
 package com.multiclone.app.ui.screens
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.multiclone.app.data.model.CloneInfo
 import com.multiclone.app.ui.viewmodels.HomeViewModel
+import java.text.SimpleDateFormat
+import java.util.*
 
 /**
- * Home screen showing all cloned apps
+ * Home screen displaying list of app clones
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
-    onNavigateToAppSelection: () -> Unit,
-    onNavigateToCloneDetails: (String) -> Unit,
-    onLaunchClone: (String, String) -> Unit,
+    onAddCloneClick: () -> Unit,
+    onCloneClick: (String) -> Unit,
     viewModel: HomeViewModel = hiltViewModel()
 ) {
     val clones by viewModel.clones.collectAsState(initial = emptyList())
     val isLoading by viewModel.isLoading.collectAsState()
+    val error by viewModel.error.collectAsState()
     
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("MultiClone App") },
-                actions = {
-                    // Settings button can be added here
-                }
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                )
             )
         },
         floatingActionButton = {
             FloatingActionButton(
-                onClick = onNavigateToAppSelection,
-                containerColor = MaterialTheme.colorScheme.primary
+                onClick = onAddCloneClick,
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary
             ) {
-                Icon(
-                    imageVector = Icons.Default.Add,
-                    contentDescription = "Add new clone"
-                )
+                Icon(Icons.Filled.Add, contentDescription = "Add Clone")
             }
         }
     ) { paddingValues ->
@@ -59,23 +60,129 @@ fun HomeScreen(
                 .padding(paddingValues)
         ) {
             if (isLoading) {
-                // Show loading indicator
                 CircularProgressIndicator(
                     modifier = Modifier.align(Alignment.Center)
                 )
             } else if (clones.isEmpty()) {
-                // Show empty state
-                EmptyHomeScreen(onNavigateToAppSelection)
+                EmptyClonesList(
+                    onAddCloneClick = onAddCloneClick,
+                    modifier = Modifier.align(Alignment.Center)
+                )
             } else {
-                // Show clones grid
-                CloneGrid(
+                ClonesList(
                     clones = clones,
-                    onCloneClick = { clone ->
-                        onLaunchClone(clone.packageName, clone.id)
-                    },
-                    onCloneLongClick = { clone ->
-                        onNavigateToCloneDetails(clone.id)
+                    onCloneClick = onCloneClick,
+                    onDeleteClone = { viewModel.deleteClone(it) }
+                )
+            }
+            
+            // Show error snackbar if any
+            error?.let {
+                Snackbar(
+                    modifier = Modifier
+                        .padding(16.dp)
+                        .align(Alignment.BottomCenter),
+                    action = {
+                        TextButton(onClick = { viewModel.clearError() }) {
+                            Text("Dismiss")
+                        }
                     }
+                ) {
+                    Text(it)
+                }
+            }
+        }
+    }
+}
+
+/**
+ * List of clones
+ */
+@Composable
+fun ClonesList(
+    clones: List<CloneInfo>,
+    onCloneClick: (String) -> Unit,
+    onDeleteClone: (String) -> Unit
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        items(clones) { clone ->
+            CloneItem(
+                clone = clone,
+                onClick = { onCloneClick(clone.id) },
+                onDelete = { onDeleteClone(clone.id) }
+            )
+        }
+    }
+}
+
+/**
+ * Individual clone item
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun CloneItem(
+    clone: CloneInfo,
+    onClick: () -> Unit,
+    onDelete: () -> Unit
+) {
+    val dateFormatter = SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault())
+    
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // App icon
+            Icon(
+                imageVector = Icons.Default.Apps,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(48.dp)
+            )
+            
+            // Clone info
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(start = 16.dp)
+            ) {
+                Text(
+                    text = clone.displayName,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = clone.packageName,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = "Last used: ${dateFormatter.format(clone.lastUsedDate)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                )
+            }
+            
+            // Delete button
+            IconButton(onClick = onDelete) {
+                Icon(
+                    imageVector = androidx.compose.material.icons.Icons.Default.Delete,
+                    contentDescription = "Delete",
+                    tint = MaterialTheme.colorScheme.error
                 )
             }
         }
@@ -83,105 +190,56 @@ fun HomeScreen(
 }
 
 /**
- * Grid display of cloned apps
+ * Empty state when no clones are available
  */
 @Composable
-fun CloneGrid(
-    clones: List<CloneInfo>,
-    onCloneClick: (CloneInfo) -> Unit,
-    onCloneLongClick: (CloneInfo) -> Unit
+fun EmptyClonesList(
+    onAddCloneClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    LazyVerticalGrid(
-        columns = GridCells.Adaptive(minSize = 120.dp),
-        contentPadding = PaddingValues(16.dp),
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        items(clones) { clone ->
-            CloneItem(
-                clone = clone,
-                onClick = { onCloneClick(clone) },
-                onLongClick = { onCloneLongClick(clone) }
-            )
-        }
-    }
-}
-
-/**
- * Individual clone app item
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun CloneItem(
-    clone: CloneInfo,
-    onClick: () -> Unit,
-    onLongClick: () -> Unit
-) {
-    Card(
-        onClick = onClick,
-        modifier = Modifier
-            .height(140.dp)
-            .fillMaxWidth(),
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(8.dp)
-        ) {
-            // App Icon
-            Icon(
-                imageVector = Icons.Default.Add, // Placeholder, should be replaced with app icon
-                contentDescription = null,
-                modifier = Modifier
-                    .size(48.dp)
-                    .padding(bottom = 8.dp)
-            )
-            
-            // App Name
-            Text(
-                text = clone.displayName,
-                style = MaterialTheme.typography.bodyMedium,
-                textAlign = TextAlign.Center,
-                maxLines = 2
-            )
-        }
-    }
-}
-
-/**
- * Empty state when no clones exist
- */
-@Composable
-fun EmptyHomeScreen(onNavigateToAppSelection: () -> Unit) {
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
+        modifier = modifier.padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Text(
-            text = "No cloned apps yet",
-            style = MaterialTheme.typography.headlineMedium,
-            textAlign = TextAlign.Center
+        Icon(
+            imageVector = Icons.Default.Apps,
+            contentDescription = null,
+            modifier = Modifier.size(72.dp),
+            tint = MaterialTheme.colorScheme.primary
         )
         
         Spacer(modifier = Modifier.height(16.dp))
         
         Text(
-            text = "Tap the + button to clone your first app",
-            style = MaterialTheme.typography.bodyLarge,
-            textAlign = TextAlign.Center
+            text = "No App Clones Yet",
+            style = MaterialTheme.typography.headlineSmall,
+            color = MaterialTheme.colorScheme.onBackground
+        )
+        
+        Spacer(modifier = Modifier.height(8.dp))
+        
+        Text(
+            text = "Create your first app clone to get started",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
         )
         
         Spacer(modifier = Modifier.height(24.dp))
         
         Button(
-            onClick = onNavigateToAppSelection
+            onClick = onAddCloneClick,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary
+            )
         ) {
-            Text("Clone New App")
+            Icon(
+                imageVector = Icons.Default.Add,
+                contentDescription = null
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Add Clone")
         }
     }
 }

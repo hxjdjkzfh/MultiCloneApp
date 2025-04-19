@@ -5,34 +5,36 @@ import androidx.lifecycle.viewModelScope
 import com.multiclone.app.data.model.CloneInfo
 import com.multiclone.app.data.repository.CloneRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
- * ViewModel for the home screen
+ * ViewModel for home screen with list of clones
  */
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val cloneRepository: CloneRepository
 ) : ViewModel() {
     
-    // Flow of clones from repository
-    val clones: Flow<List<CloneInfo>> = cloneRepository.clones
-    
     // Loading state
-    private val _isLoading = MutableStateFlow(true)
+    private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
     
+    // Error message
+    private val _error = MutableStateFlow<String?>(null)
+    val error: StateFlow<String?> = _error.asStateFlow()
+    
+    // Initialize with clones from repository
+    val clones: Flow<List<CloneInfo>> = cloneRepository.clones
+    
     init {
-        // Initialize the repository and load clones
         viewModelScope.launch {
+            _isLoading.value = true
             try {
-                _isLoading.value = true
                 cloneRepository.initialize()
+            } catch (e: Exception) {
+                _error.value = "Error loading clones: ${e.message}"
             } finally {
                 _isLoading.value = false
             }
@@ -47,6 +49,8 @@ class HomeViewModel @Inject constructor(
             _isLoading.value = true
             try {
                 cloneRepository.deleteClone(cloneId)
+            } catch (e: Exception) {
+                _error.value = "Error deleting clone: ${e.message}"
             } finally {
                 _isLoading.value = false
             }
@@ -58,7 +62,31 @@ class HomeViewModel @Inject constructor(
      */
     fun updateNotificationSettings(cloneId: String, enabled: Boolean) {
         viewModelScope.launch {
-            cloneRepository.updateNotificationSettings(cloneId, enabled)
+            try {
+                cloneRepository.updateNotificationSettings(cloneId, enabled)
+            } catch (e: Exception) {
+                _error.value = "Error updating notification settings: ${e.message}"
+            }
         }
+    }
+    
+    /**
+     * Update last used time when launching a clone
+     */
+    fun launchClone(cloneId: String) {
+        viewModelScope.launch {
+            try {
+                cloneRepository.updateLastUsedTime(cloneId)
+            } catch (e: Exception) {
+                _error.value = "Error updating clone usage time: ${e.message}"
+            }
+        }
+    }
+    
+    /**
+     * Clear the error message
+     */
+    fun clearError() {
+        _error.value = null
     }
 }

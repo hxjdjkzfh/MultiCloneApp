@@ -1,84 +1,92 @@
 package com.multiclone.app.core.virtualization
 
 import android.content.Context
-import android.content.Intent
 import com.multiclone.app.data.repository.CloneRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Core engine that manages virtual app environments
+ * Core engine for app virtualization
+ * 
+ * Manages the virtualization of apps and provides an environment for clones to run in
  */
 @Singleton
 class VirtualAppEngine @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val cloneRepository: CloneRepository,
-    private val cloneEnvironment: CloneEnvironment,
-    private val cloneManagerService: CloneManagerService
+    private val cloneRepository: CloneRepository
 ) {
-    private val scope = CoroutineScope(Dispatchers.IO)
+    
+    // Map of active clone environments
+    private val activeEnvironments = mutableMapOf<String, CloneEnvironment>()
     
     /**
-     * Initialize the engine
+     * Initialize or retrieve the environment for a cloned app
      */
-    fun initialize() {
-        // Start the manager service
-        cloneManagerService.startService()
+    suspend fun initializeCloneEnvironment(cloneId: String, packageName: String): CloneEnvironment {
+        // Check if environment is already active
+        val existing = activeEnvironments[cloneId]
+        if (existing != null) {
+            return existing
+        }
         
-        // Initialize virtualization components
-        cloneEnvironment.initialize()
-    }
-    
-    /**
-     * Launch a cloned app
-     */
-    fun launchClone(packageName: String, cloneId: String) {
-        // Update usage timestamp
-        scope.launch {
+        // Create a new environment
+        return withContext(Dispatchers.IO) {
+            // Get clone info from repository
+            val clone = cloneRepository.clones.collect { clones ->
+                clones.find { it.id == cloneId }
+            }
+            
+            // Get or create clone directory
+            val cloneDir = if (clone != null && clone.storagePath.isNotEmpty()) {
+                File(clone.storagePath)
+            } else {
+                File(context.filesDir, "${ClonedAppInstaller.CLONES_DIRECTORY}/$cloneId")
+            }
+            
+            if (!cloneDir.exists()) {
+                cloneDir.mkdirs()
+            }
+            
+            // Create environment
+            val environment = CloneEnvironment(
+                context = context,
+                cloneId = cloneId,
+                packageName = packageName,
+                storageDir = cloneDir
+            )
+            
+            // Store in active environments
+            activeEnvironments[cloneId] = environment
+            
+            // Update last used time
             cloneRepository.updateLastUsedTime(cloneId)
+            
+            return@withContext environment
         }
-        
-        // Start proxy activity to launch the clone
-        val intent = Intent(context, CloneProxyActivity::class.java).apply {
-            putExtra(CloneProxyActivity.EXTRA_PACKAGE_NAME, packageName)
-            putExtra(CloneProxyActivity.EXTRA_CLONE_ID, cloneId)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        context.startActivity(intent)
     }
     
     /**
-     * Check if a package can be cloned
+     * Remove a clone environment from active environments
      */
-    fun canClonePackage(packageName: String): Boolean {
-        // Maintain a blocklist of apps that cannot be cloned
-        val blockedPackages = listOf(
-            "com.android.systemui",
-            "com.google.android.permissioncontroller",
-            "com.android.settings",
-            context.packageName // Don't allow cloning of our own app
-        )
-        
-        // Check if the package is in the blocklist
-        if (blockedPackages.contains(packageName)) {
-            return false
-        }
-        
-        // Additional checks can be added here, for example:
-        // - Check if the app requires system permissions that can't be virtualized
-        // - Check if the app is already running in a virtual environment
-        
-        return true
+    fun releaseEnvironment(cloneId: String) {
+        activeEnvironments.remove(cloneId)
     }
     
     /**
-     * Clean up resources when the app is being destroyed
+     * Get all active environments
      */
-    fun shutdown() {
-        cloneManagerService.stopService()
+    fun getActiveEnvironments(): Map<String, CloneEnvironment> {
+        return activeEnvironments.toMap()
+    }
+    
+    /**
+     * Check if a clone environment is active
+     */
+    fun isEnvironmentActive(cloneId: String): Boolean {
+        return activeEnvironments.containsKey(cloneId)
     }
 }
