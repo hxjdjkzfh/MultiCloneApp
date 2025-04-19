@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <full-backup-content>
-    <!-- Exclude app_clones directory from backups for security -->
-    <exclude domain="file" path="app_clones"/>
+    <exclude domain="root" path="."/>
+    <exclude domain="file" path="clone_environments/"/>
+    <exclude domain="file" path="virtualization/"/>
+    <include domain="file" path="preferences/" />
+    <include domain="file" path="databases/" />
 </full-backup-content>

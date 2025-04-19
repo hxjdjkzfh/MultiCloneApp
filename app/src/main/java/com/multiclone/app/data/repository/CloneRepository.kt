@@ -11,190 +11,302 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
-import java.util.Date
+import timber.log.Timber
+import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Repository for managing cloned app data
+ * Repository responsible for managing cloned app data
  */
 @Singleton
 class CloneRepository @Inject constructor(
     private val context: Context
 ) {
+    private val clones = MutableStateFlow<List<CloneInfo>>(emptyList())
     
-    companion object {
-        private const val PREFS_FILENAME = "multiclone_data"
-        private const val KEY_CLONES = "clones"
+    // Current environment version
+    private val currentEnvironmentVersion = 2
+    
+    // Master key for encrypted preferences
+    private val masterKey = MasterKey.Builder(context)
+        .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+        .build()
+    
+    // Encrypted shared preferences for storing clone data
+    private val sharedPreferences = EncryptedSharedPreferences.create(
+        context,
+        "clones_data",
+        masterKey,
+        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+    )
+    
+    init {
+        loadClones()
     }
     
-    // StateFlow for all clones
-    private val _clones = MutableStateFlow<List<CloneInfo>>(emptyList())
-    val clones: Flow<List<CloneInfo>> = _clones.asStateFlow()
-    
-    // Flag to track initialization
-    private var isInitialized = false
+    /**
+     * Get a flow of all clones
+     */
+    fun getClones(): Flow<List<CloneInfo>> = clones.asStateFlow()
     
     /**
-     * Initialize the repository by loading clones from storage
+     * Get a clone by ID
      */
-    suspend fun initialize() {
-        if (isInitialized) return
-        
-        withContext(Dispatchers.IO) {
-            loadClones()
-            isInitialized = true
-        }
+    suspend fun getCloneById(id: String): CloneInfo? = withContext(Dispatchers.IO) {
+        clones.value.find { it.id == id }
+    }
+    
+    /**
+     * Get clones by original package name
+     */
+    suspend fun getClonesByPackage(packageName: String): List<CloneInfo> = withContext(Dispatchers.IO) {
+        clones.value.filter { it.originalPackageName == packageName }
     }
     
     /**
      * Add a new clone
      */
-    suspend fun addClone(clone: CloneInfo) = withContext(Dispatchers.IO) {
-        val currentClones = _clones.value.toMutableList()
-        currentClones.add(clone)
-        _clones.value = currentClones
-        
-        saveClones()
+    suspend fun addClone(clone: CloneInfo): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val currentClones = clones.value.toMutableList()
+            currentClones.add(clone)
+            clones.value = currentClones
+            saveClones()
+            true
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to add clone")
+            false
+        }
     }
     
     /**
      * Update an existing clone
      */
-    suspend fun updateClone(clone: CloneInfo) = withContext(Dispatchers.IO) {
-        val currentClones = _clones.value.toMutableList()
-        val index = currentClones.indexOfFirst { it.id == clone.id }
-        
-        if (index != -1) {
-            currentClones[index] = clone
-            _clones.value = currentClones
-            
-            saveClones()
+    suspend fun updateClone(clone: CloneInfo): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val currentClones = clones.value.toMutableList()
+            val index = currentClones.indexOfFirst { it.id == clone.id }
+            if (index != -1) {
+                currentClones[index] = clone
+                clones.value = currentClones
+                saveClones()
+                return@withContext true
+            }
+            false
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to update clone")
+            false
         }
     }
     
     /**
      * Delete a clone by ID
      */
-    suspend fun deleteClone(cloneId: String) = withContext(Dispatchers.IO) {
-        val currentClones = _clones.value.toMutableList()
-        val removed = currentClones.removeIf { it.id == cloneId }
-        
-        if (removed) {
-            _clones.value = currentClones
-            saveClones()
+    suspend fun deleteClone(id: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val currentClones = clones.value.toMutableList()
+            val removed = currentClones.removeIf { it.id == id }
+            if (removed) {
+                clones.value = currentClones
+                saveClones()
+                deleteCloneDirectory(id)
+                return@withContext true
+            }
+            false
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to delete clone")
+            false
         }
     }
     
     /**
-     * Update notification settings for a clone
+     * Update clone running status
      */
-    suspend fun updateNotificationSettings(cloneId: String, enabled: Boolean) = withContext(Dispatchers.IO) {
-        val currentClones = _clones.value.toMutableList()
-        val index = currentClones.indexOfFirst { it.id == cloneId }
-        
-        if (index != -1) {
-            val clone = currentClones[index]
-            currentClones[index] = clone.copy(notificationsEnabled = enabled)
-            _clones.value = currentClones
-            
-            saveClones()
+    suspend fun updateCloneRunningStatus(id: String, isRunning: Boolean): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val currentClones = clones.value.toMutableList()
+            val index = currentClones.indexOfFirst { it.id == id }
+            if (index != -1) {
+                val clone = currentClones[index]
+                currentClones[index] = clone.copy(isRunning = isRunning)
+                clones.value = currentClones
+                saveClones()
+                return@withContext true
+            }
+            false
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to update clone running status")
+            false
         }
     }
     
     /**
-     * Update last used time for a clone
+     * Update launch statistics for a clone
      */
-    suspend fun updateLastUsedTime(cloneId: String) = withContext(Dispatchers.IO) {
-        val currentClones = _clones.value.toMutableList()
-        val index = currentClones.indexOfFirst { it.id == cloneId }
-        
-        if (index != -1) {
-            val clone = currentClones[index]
-            currentClones[index] = clone.copy(lastUsedDate = Date())
-            _clones.value = currentClones
-            
-            saveClones()
+    suspend fun updateLaunchStats(id: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val currentClones = clones.value.toMutableList()
+            val index = currentClones.indexOfFirst { it.id == id }
+            if (index != -1) {
+                val clone = currentClones[index]
+                currentClones[index] = clone.copy(
+                    launchCount = clone.launchCount + 1,
+                    lastLaunchTime = System.currentTimeMillis()
+                )
+                clones.value = currentClones
+                saveClones()
+                return@withContext true
+            }
+            false
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to update launch stats")
+            false
         }
     }
     
     /**
-     * Get an encrypted shared preferences instance
+     * Get the base directory for all clone environments
      */
-    private fun getEncryptedSharedPreferences(): EncryptedSharedPreferences {
-        val masterKey = MasterKey.Builder(context)
-            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-            .build()
-        
-        return EncryptedSharedPreferences.create(
-            context,
-            PREFS_FILENAME,
-            masterKey,
-            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-        ) as EncryptedSharedPreferences
+    fun getBaseClonesDirectory(): File {
+        val dir = File(context.filesDir, "clone_environments")
+        if (!dir.exists()) {
+            dir.mkdirs()
+        }
+        return dir
     }
     
     /**
-     * Load clones from encrypted shared preferences
+     * Get the directory for a specific clone
+     */
+    fun getCloneDirectory(cloneId: String): File {
+        val dir = File(getBaseClonesDirectory(), cloneId)
+        if (!dir.exists()) {
+            dir.mkdirs()
+        }
+        return dir
+    }
+    
+    /**
+     * Get clones that need environment updates
+     */
+    suspend fun getClonesNeedingUpdate(): List<CloneInfo> = withContext(Dispatchers.IO) {
+        clones.value.filter { it.needsEnvironmentUpdate(currentEnvironmentVersion) }
+    }
+    
+    /**
+     * Update a clone's environment version
+     */
+    suspend fun updateCloneEnvironmentVersion(id: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val currentClones = clones.value.toMutableList()
+            val index = currentClones.indexOfFirst { it.id == id }
+            if (index != -1) {
+                val clone = currentClones[index]
+                currentClones[index] = clone.copy(environmentVersion = currentEnvironmentVersion)
+                clones.value = currentClones
+                saveClones()
+                return@withContext true
+            }
+            false
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to update clone environment version")
+            false
+        }
+    }
+    
+    /**
+     * Load clones from storage
      */
     private fun loadClones() {
         try {
-            val prefs = getEncryptedSharedPreferences()
-            val clonesString = prefs.getString(KEY_CLONES, null)
+            val jsonString = sharedPreferences.getString("clones", null) ?: return
+            val jsonArray = JSONArray(jsonString)
+            val loadedClones = mutableListOf<CloneInfo>()
             
-            if (clonesString != null) {
-                val clonesArray = JSONArray(clonesString)
-                val clonesList = mutableListOf<CloneInfo>()
-                
-                for (i in 0 until clonesArray.length()) {
-                    val cloneJson = clonesArray.getJSONObject(i)
-                    val cloneMap = jsonObjectToMap(cloneJson)
-                    val clone = CloneInfo.fromMap(cloneMap)
-                    clonesList.add(clone)
-                }
-                
-                _clones.value = clonesList
+            for (i in 0 until jsonArray.length()) {
+                val jsonObject = jsonArray.getJSONObject(i)
+                loadedClones.add(parseCloneFromJson(jsonObject))
             }
+            
+            clones.value = loadedClones
         } catch (e: Exception) {
-            e.printStackTrace()
+            Timber.e(e, "Failed to load clones")
         }
     }
     
     /**
-     * Save clones to encrypted shared preferences
+     * Save clones to storage
      */
     private fun saveClones() {
         try {
-            val prefs = getEncryptedSharedPreferences()
-            val clonesArray = JSONArray()
-            
-            for (clone in _clones.value) {
-                val cloneMap = CloneInfo.toMap(clone)
-                val cloneJson = JSONObject(cloneMap)
-                clonesArray.put(cloneJson)
+            val jsonArray = JSONArray()
+            clones.value.forEach { clone ->
+                jsonArray.put(createJsonFromClone(clone))
             }
             
-            prefs.edit().putString(KEY_CLONES, clonesArray.toString()).apply()
+            sharedPreferences.edit()
+                .putString("clones", jsonArray.toString())
+                .apply()
         } catch (e: Exception) {
-            e.printStackTrace()
+            Timber.e(e, "Failed to save clones")
         }
     }
     
     /**
-     * Convert JSON object to a map
+     * Parse clone from JSON object
      */
-    private fun jsonObjectToMap(jsonObject: JSONObject): Map<String, Any> {
-        val map = mutableMapOf<String, Any>()
-        val keys = jsonObject.keys()
-        
-        while (keys.hasNext()) {
-            val key = keys.next()
-            val value = jsonObject.get(key)
-            
-            map[key] = value
+    private fun parseCloneFromJson(jsonObject: JSONObject): CloneInfo {
+        return CloneInfo(
+            id = jsonObject.getString("id"),
+            originalPackageName = jsonObject.getString("originalPackageName"),
+            customName = jsonObject.getString("customName"),
+            createdAt = jsonObject.getLong("createdAt"),
+            lastLaunchTime = jsonObject.optLong("lastLaunchTime", 0),
+            launchCount = jsonObject.optInt("launchCount", 0),
+            customIconPath = if (jsonObject.has("customIconPath")) jsonObject.getString("customIconPath") else null,
+            customColor = if (jsonObject.has("customColor")) jsonObject.getInt("customColor") else null,
+            storageIsolationLevel = jsonObject.optInt("storageIsolationLevel", 1),
+            useCustomNotifications = jsonObject.optBoolean("useCustomNotifications", true),
+            showInLauncher = jsonObject.optBoolean("showInLauncher", true),
+            environmentVersion = jsonObject.optInt("environmentVersion", 1),
+            isRunning = jsonObject.optBoolean("isRunning", false)
+        )
+    }
+    
+    /**
+     * Create JSON object from clone
+     */
+    private fun createJsonFromClone(clone: CloneInfo): JSONObject {
+        val jsonObject = JSONObject()
+        jsonObject.put("id", clone.id)
+        jsonObject.put("originalPackageName", clone.originalPackageName)
+        jsonObject.put("customName", clone.customName)
+        jsonObject.put("createdAt", clone.createdAt)
+        jsonObject.put("lastLaunchTime", clone.lastLaunchTime)
+        jsonObject.put("launchCount", clone.launchCount)
+        if (clone.customIconPath != null) {
+            jsonObject.put("customIconPath", clone.customIconPath)
         }
-        
-        return map
+        if (clone.customColor != null) {
+            jsonObject.put("customColor", clone.customColor)
+        }
+        jsonObject.put("storageIsolationLevel", clone.storageIsolationLevel)
+        jsonObject.put("useCustomNotifications", clone.useCustomNotifications)
+        jsonObject.put("showInLauncher", clone.showInLauncher)
+        jsonObject.put("environmentVersion", clone.environmentVersion)
+        jsonObject.put("isRunning", clone.isRunning)
+        return jsonObject
+    }
+    
+    /**
+     * Delete a clone's directory
+     */
+    private fun deleteCloneDirectory(cloneId: String) {
+        val dir = getCloneDirectory(cloneId)
+        if (dir.exists()) {
+            dir.deleteRecursively()
+        }
     }
 }

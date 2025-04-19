@@ -1,13 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <data-extraction-rules>
     <cloud-backup>
-        <!-- Exclude sensitive data from cloud backups -->
-        <exclude domain="file" path="app_clones"/>
-        <exclude domain="file" path="shared_prefs/multiclone_data.xml"/>
+        <exclude domain="root" path="."/>
+        <exclude domain="file" path="clone_environments/"/>
+        <exclude domain="file" path="virtualization/"/>
+        <include domain="file" path="preferences/" />
+        <include domain="file" path="databases/" />
     </cloud-backup>
     <device-transfer>
-        <!-- Include necessary data for device transfers -->
-        <include domain="file" path="."/>
-        <exclude domain="file" path="app_clones"/>
+        <exclude domain="root" path="."/>
+        <exclude domain="file" path="clone_environments/"/>
+        <exclude domain="file" path="virtualization/"/>
+        <include domain="file" path="preferences/" />
+        <include domain="file" path="databases/" />
     </device-transfer>
 </data-extraction-rules>

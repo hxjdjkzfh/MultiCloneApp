@@ -1,32 +1,25 @@
 package com.multiclone.app.core.virtualization
 
-import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import com.multiclone.app.ui.theme.MultiCloneAppTheme
+import androidx.lifecycle.lifecycleScope
+import com.multiclone.app.R
+import com.multiclone.app.data.repository.CloneRepository
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import timber.log.Timber
 import javax.inject.Inject
 
 /**
- * Activity that acts as a proxy to launch cloned apps
- * 
- * This activity receives a clone ID and package name, initializes the virtual environment,
- * and launches the cloned app in that environment
+ * Activity for proxying cloned app launches.
+ * This is the entry point from launcher shortcuts and URI scheme handlers.
  */
 @AndroidEntryPoint
 class CloneProxyActivity : ComponentActivity() {
+
+    @Inject
+    lateinit var cloneRepository: CloneRepository
     
     @Inject
     lateinit var virtualAppEngine: VirtualAppEngine
@@ -34,75 +27,115 @@ class CloneProxyActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        // Show loading screen while setting up the cloned app
-        setContent {
-            MultiCloneAppTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                ) {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CircularProgressIndicator()
-                    }
-                }
-            }
-        }
-        
-        // Get clone ID and package name from intent
+        // Get the clone ID from the intent
         val cloneId = intent.getStringExtra("clone_id")
-        val packageName = intent.getStringExtra("package_name")
         
-        if (cloneId != null && packageName != null) {
-            // Launch the cloned app
-            launchClonedApp(cloneId, packageName)
+        if (cloneId.isNullOrEmpty()) {
+            // No clone ID provided, handle URI scheme
+            handleUriScheme()
         } else {
-            // Invalid parameters, finish activity
-            finish()
+            // Launch the cloned app
+            launchClonedApp(cloneId)
         }
     }
     
     /**
-     * Launch the cloned app in the virtual environment
+     * Launch a cloned app
      */
-    private fun launchClonedApp(cloneId: String, packageName: String) {
-        CoroutineScope(Dispatchers.IO).launch {
+    private fun launchClonedApp(cloneId: String) {
+        lifecycleScope.launch {
             try {
-                // Initialize the virtual environment for this clone
-                val environment = virtualAppEngine.initializeCloneEnvironment(cloneId, packageName)
+                Timber.d("Launching clone $cloneId")
                 
-                // Get the launch intent for the original app
-                val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
-                if (launchIntent != null) {
-                    // Modify the intent to run in our virtual environment
-                    environment.prepareIntent(launchIntent)
-                    
-                    // Launch the app
-                    startActivity(launchIntent)
+                // Get the clone info
+                val cloneInfo = cloneRepository.getCloneById(cloneId)
+                
+                if (cloneInfo == null) {
+                    Timber.e("Clone not found: $cloneId")
+                    showError(getString(R.string.error_app_not_found))
+                    return@launch
                 }
                 
-                // Close this proxy activity
+                // Update launch statistics
+                cloneRepository.updateLaunchStats(cloneId)
+                
+                // Launch the app through the virtualization engine
+                val launched = virtualAppEngine.launchApp(cloneInfo)
+                
+                if (!launched) {
+                    Timber.e("Failed to launch clone $cloneId")
+                    showError(getString(R.string.error_virtualization))
+                }
+                
+                // Finish this activity
                 finish()
             } catch (e: Exception) {
-                e.printStackTrace()
-                finish()
+                Timber.e(e, "Error launching clone")
+                showError(e.message ?: getString(R.string.error_virtualization))
             }
         }
     }
     
-    companion object {
-        /**
-         * Helper method to launch a cloned app
-         */
-        fun launchClone(context: Context, packageName: String, cloneId: String) {
-            val intent = Intent(context, CloneProxyActivity::class.java).apply {
-                putExtra("clone_id", cloneId)
-                putExtra("package_name", packageName)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    /**
+     * Handle deep links via the multiclone:// URI scheme
+     */
+    private fun handleUriScheme() {
+        val uri = intent.data
+        if (uri != null && uri.scheme == "multiclone") {
+            try {
+                when (uri.host) {
+                    "launch" -> {
+                        // Format: multiclone://launch/CLONE_ID
+                        val cloneId = uri.pathSegments.firstOrNull()
+                        if (cloneId != null) {
+                            launchClonedApp(cloneId)
+                        } else {
+                            showError(getString(R.string.error_invalid_operation))
+                        }
+                    }
+                    "create" -> {
+                        // Format: multiclone://create/PACKAGE_NAME
+                        val packageName = uri.pathSegments.firstOrNull()
+                        if (packageName != null) {
+                            // Redirect to the main app with the package name
+                            val mainIntent = Intent(this, Class.forName("com.multiclone.app.MainActivity")).apply {
+                                action = "com.multiclone.app.action.CREATE_CLONE"
+                                putExtra("package_name", packageName)
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            startActivity(mainIntent)
+                            finish()
+                        } else {
+                            showError(getString(R.string.error_invalid_operation))
+                        }
+                    }
+                    else -> {
+                        showError(getString(R.string.error_invalid_operation))
+                    }
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "Error handling URI scheme")
+                showError(e.message ?: getString(R.string.error_invalid_operation))
             }
-            context.startActivity(intent)
+        } else {
+            showError(getString(R.string.error_invalid_operation))
         }
+    }
+    
+    /**
+     * Show an error message
+     */
+    private fun showError(message: String) {
+        // In a real implementation, we would show a dialog or toast
+        Timber.e("Error: $message")
+        
+        // For now, just redirect to the main app with the error
+        val mainIntent = Intent(this, Class.forName("com.multiclone.app.MainActivity")).apply {
+            action = "com.multiclone.app.action.SHOW_ERROR"
+            putExtra("error_message", message)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        startActivity(mainIntent)
+        finish()
     }
 }

@@ -8,12 +8,12 @@ plugins {
 
 android {
     namespace = "com.multiclone.app"
-    compileSdk = 34
+    compileSdk = 30
 
     defaultConfig {
         applicationId = "com.multiclone.app"
         minSdk = 26
-        targetSdk = 34
+        targetSdk = 30
         versionCode = 1
         versionName = "1.0.0"
 
@@ -21,6 +21,9 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
+        
+        // Enable multidex
+        multiDexEnabled = true
     }
 
     signingConfigs {
@@ -77,6 +80,7 @@ dependencies {
     implementation("androidx.core:core-ktx:1.10.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.6.0")
     implementation("androidx.activity:activity-compose:1.7.0")
+    implementation("androidx.multidex:multidex:2.0.1")
     implementation(platform("androidx.compose:compose-bom:2023.04.00"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
@@ -101,6 +105,9 @@ dependencies {
     
     // JSON parsing
     implementation("org.json:json:20230618")
+    
+    // Logging
+    implementation("com.jakewharton.timber:timber:5.0.1")
     
     // Testing
     testImplementation("junit:junit:4.13.2")

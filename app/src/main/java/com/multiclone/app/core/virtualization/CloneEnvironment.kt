@@ -1,111 +1,265 @@
 package com.multiclone.app.core.virtualization
 
 import android.content.Context
-import android.content.Intent
-import android.net.Uri
+import android.content.pm.ApplicationInfo
+import android.content.pm.PackageManager
+import com.multiclone.app.data.model.CloneInfo
+import com.multiclone.app.data.repository.CloneRepository
+import timber.log.Timber
 import java.io.File
+import javax.inject.Inject
+import javax.inject.Singleton
 
 /**
- * Represents a virtual environment for a cloned app
- * 
- * This class handles the redirection of app resources, storage, and communication
- * to ensure proper isolation between the original app and its clones
+ * Manages the virtualized environment for a cloned app
+ * Each clone gets its own isolated environment for data storage
  */
-class CloneEnvironment(
+@Singleton
+class CloneEnvironment @Inject constructor(
     private val context: Context,
-    val cloneId: String,
-    val packageName: String,
-    val storageDir: File
+    private val cloneRepository: CloneRepository
 ) {
-    
-    // Redirected directories for app data
-    val filesDir = File(storageDir, "files").apply { mkdirs() }
-    val cacheDir = File(storageDir, "cache").apply { mkdirs() }
-    val databasesDir = File(storageDir, "databases").apply { mkdirs() }
-    val prefsDir = File(storageDir, "shared_prefs").apply { mkdirs() }
-    
-    // Track if environment is initialized
-    private var isInitialized = false
-    
-    /**
-     * Initialize the environment
-     * 
-     * In a real implementation, this would set up hooks into Android's
-     * resource and storage subsystems
-     */
-    fun initialize() {
-        if (isInitialized) return
+    companion object {
+        // Core environment directories
+        private const val DIR_DATA = "data"
+        private const val DIR_STORAGE = "storage"
+        private const val DIR_CACHE = "cache"
+        private const val DIR_SHARED_PREFS = "shared_prefs"
+        private const val DIR_FILES = "files"
+        private const val DIR_DATABASES = "databases"
         
-        // Create necessary directories and prepare environment
-        filesDir.mkdirs()
-        cacheDir.mkdirs()
-        databasesDir.mkdirs()
-        prefsDir.mkdirs()
-        
-        isInitialized = true
+        // Virtual storage directory structure
+        private const val DIR_STORAGE_EXTERNAL = "external"
+        private const val DIR_STORAGE_DCIM = "DCIM"
+        private const val DIR_STORAGE_PICTURES = "Pictures"
+        private const val DIR_STORAGE_MOVIES = "Movies"
+        private const val DIR_STORAGE_DOWNLOADS = "Download"
+        private const val DIR_STORAGE_MUSIC = "Music"
+        private const val DIR_STORAGE_DOCUMENTS = "Documents"
     }
     
     /**
-     * Modifies an intent to run the app in this virtual environment
+     * Initialize a clone environment
+     * @param cloneInfo the clone information
+     * @return true if the environment was created successfully
      */
-    fun prepareIntent(intent: Intent) {
-        // Ensure environment is initialized
-        initialize()
-        
-        // Add necessary data to intent
-        intent.putExtra("clone_id", cloneId)
-        intent.putExtra("virtual_storage_path", storageDir.absolutePath)
-        
-        // Set explicit route through our virtualization layer
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-    }
-    
-    /**
-     * Get a file URI that's specific to this clone
-     */
-    fun getRedirectedUri(originalUri: Uri): Uri {
-        // In a real implementation, we would map the original URI to a 
-        // clone-specific URI that redirects to our storage paths
-        return originalUri
-    }
-    
-    /**
-     * Get a redirected path for file access
-     */
-    fun getRedirectedPath(originalPath: String): String {
-        // If the path is pointing to app-specific storage, redirect it to our clone storage
-        val originalFile = File(originalPath)
-        
-        // Check if this is an app-specific path that needs redirection
-        if (originalPath.contains("/data/data/$packageName/") || 
-            originalPath.contains("/data/user/0/$packageName/")) {
+    fun initializeEnvironment(cloneInfo: CloneInfo): Boolean {
+        try {
+            Timber.d("Initializing environment for clone ${cloneInfo.id}")
             
-            // Determine which subdirectory this belongs to
-            val redirectedFile = when {
-                originalPath.contains("/files/") -> 
-                    File(filesDir, originalFile.name)
-                originalPath.contains("/cache/") -> 
-                    File(cacheDir, originalFile.name)
-                originalPath.contains("/databases/") -> 
-                    File(databasesDir, originalFile.name)
-                originalPath.contains("/shared_prefs/") -> 
-                    File(prefsDir, originalFile.name)
-                else -> 
-                    File(storageDir, originalFile.name)
+            // Get the base directory for this clone
+            val cloneDir = cloneRepository.getCloneDirectory(cloneInfo.id)
+            
+            // Create core directories
+            createCoreDirectories(cloneDir)
+            
+            // Initialize storage based on isolation level
+            initializeStorage(cloneDir, cloneInfo)
+            
+            // Create metadata file
+            createMetadataFile(cloneDir, cloneInfo)
+            
+            return true
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to initialize clone environment for ${cloneInfo.id}")
+            return false
+        }
+    }
+    
+    /**
+     * Clean up a clone environment
+     * @param cloneId the clone identifier
+     */
+    fun cleanupEnvironment(cloneId: String) {
+        try {
+            Timber.d("Cleaning up environment for clone $cloneId")
+            
+            // Get the base directory for this clone
+            val cloneDir = cloneRepository.getCloneDirectory(cloneId)
+            
+            // Delete the directory
+            if (cloneDir.exists()) {
+                cloneDir.deleteRecursively()
+                Timber.d("Deleted clone directory for $cloneId")
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to cleanup clone environment for $cloneId")
+        }
+    }
+    
+    /**
+     * Check if a clone environment exists and is valid
+     * @param cloneId the clone identifier
+     * @return true if the environment exists and is valid
+     */
+    fun isEnvironmentValid(cloneId: String): Boolean {
+        try {
+            val cloneDir = cloneRepository.getCloneDirectory(cloneId)
+            if (!cloneDir.exists()) return false
+            
+            // Check for required directories
+            val dataDir = File(cloneDir, DIR_DATA)
+            val storageDir = File(cloneDir, DIR_STORAGE)
+            
+            // Basic validation: make sure core directories exist
+            return dataDir.exists() && storageDir.exists()
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to validate clone environment for $cloneId")
+            return false
+        }
+    }
+    
+    /**
+     * Create the environment core directories
+     */
+    private fun createCoreDirectories(cloneDir: File) {
+        // Create the main data directory
+        val dataDir = File(cloneDir, DIR_DATA)
+        dataDir.mkdirs()
+        
+        // Create app-specific directories
+        File(dataDir, DIR_SHARED_PREFS).mkdirs()
+        File(dataDir, DIR_FILES).mkdirs()
+        File(dataDir, DIR_DATABASES).mkdirs()
+        File(dataDir, DIR_CACHE).mkdirs()
+        
+        // Create storage directory
+        File(cloneDir, DIR_STORAGE).mkdirs()
+    }
+    
+    /**
+     * Initialize the storage environment based on isolation level
+     */
+    private fun initializeStorage(cloneDir: File, cloneInfo: CloneInfo) {
+        val storageDir = File(cloneDir, DIR_STORAGE)
+        
+        when (cloneInfo.storageIsolationLevel) {
+            // Level 0: Shared with original app (create symlinks)
+            0 -> {
+                // In a real implementation, we would create symlinks to original storage
+                // For prototype, still create the directories but will use shared file access
+                createVirtualStorageStructure(storageDir)
             }
             
-            return redirectedFile.absolutePath
+            // Level 1: Isolated but with some shared structure
+            1 -> {
+                // Create isolated environment
+                createVirtualStorageStructure(storageDir)
+                
+                // Pre-populate with app-specific files if available
+                try {
+                    val originalApp = context.packageManager.getApplicationInfo(
+                        cloneInfo.originalPackageName, 
+                        PackageManager.GET_SHARED_LIBRARY_FILES
+                    )
+                    copyAppAssets(originalApp, storageDir)
+                } catch (e: Exception) {
+                    Timber.e(e, "Failed to copy app assets")
+                }
+            }
+            
+            // Level 2: Fully isolated environment
+            2 -> {
+                // Create completely isolated storage
+                createVirtualStorageStructure(storageDir)
+            }
         }
-        
-        // Not an app-specific path, return as is
-        return originalPath
     }
     
     /**
-     * Cleanup resources when this environment is no longer needed
+     * Create the virtual storage directory structure
      */
-    fun cleanup() {
-        // In a real implementation, this would release any hooks or resources
-        isInitialized = false
+    private fun createVirtualStorageStructure(storageDir: File) {
+        // External storage
+        val externalDir = File(storageDir, DIR_STORAGE_EXTERNAL)
+        externalDir.mkdirs()
+        
+        // Common directories
+        File(externalDir, DIR_STORAGE_DCIM).mkdirs()
+        File(externalDir, DIR_STORAGE_PICTURES).mkdirs()
+        File(externalDir, DIR_STORAGE_DOWNLOADS).mkdirs()
+        File(externalDir, DIR_STORAGE_MOVIES).mkdirs()
+        File(externalDir, DIR_STORAGE_MUSIC).mkdirs()
+        File(externalDir, DIR_STORAGE_DOCUMENTS).mkdirs()
+    }
+    
+    /**
+     * Copy application assets to storage
+     */
+    private fun copyAppAssets(appInfo: ApplicationInfo, storageDir: File) {
+        // In a production implementation, we would copy over assets and resources
+        // This would involve accessing the APK and extracting needed files
+        
+        // For now, we'll just create a placeholder file
+        val assetsDir = File(storageDir, "app_assets")
+        assetsDir.mkdirs()
+        
+        File(assetsDir, ".placeholder").createNewFile()
+    }
+    
+    /**
+     * Create a metadata file to track environment details
+     */
+    private fun createMetadataFile(cloneDir: File, cloneInfo: CloneInfo) {
+        val metadataFile = File(cloneDir, "metadata.json")
+        val metadata = """
+            {
+                "cloneId": "${cloneInfo.id}",
+                "originalPackage": "${cloneInfo.originalPackageName}",
+                "createdAt": ${cloneInfo.createdAt},
+                "storageIsolationLevel": ${cloneInfo.storageIsolationLevel},
+                "environmentVersion": ${cloneInfo.environmentVersion}
+            }
+        """.trimIndent()
+        
+        metadataFile.writeText(metadata)
+    }
+    
+    /**
+     * Gets the app data directory for the clone
+     */
+    fun getDataDirectory(cloneId: String): File {
+        val cloneDir = cloneRepository.getCloneDirectory(cloneId)
+        return File(cloneDir, DIR_DATA)
+    }
+    
+    /**
+     * Gets the app storage directory for the clone
+     */
+    fun getStorageDirectory(cloneId: String): File {
+        val cloneDir = cloneRepository.getCloneDirectory(cloneId)
+        return File(cloneDir, DIR_STORAGE)
+    }
+    
+    /**
+     * Gets the shared preferences directory for the clone
+     */
+    fun getSharedPrefsDirectory(cloneId: String): File {
+        val dataDir = getDataDirectory(cloneId)
+        return File(dataDir, DIR_SHARED_PREFS)
+    }
+    
+    /**
+     * Gets the databases directory for the clone
+     */
+    fun getDatabasesDirectory(cloneId: String): File {
+        val dataDir = getDataDirectory(cloneId)
+        return File(dataDir, DIR_DATABASES)
+    }
+    
+    /**
+     * Gets the files directory for the clone
+     */
+    fun getFilesDirectory(cloneId: String): File {
+        val dataDir = getDataDirectory(cloneId)
+        return File(dataDir, DIR_FILES)
+    }
+    
+    /**
+     * Gets the cache directory for the clone
+     */
+    fun getCacheDirectory(cloneId: String): File {
+        val dataDir = getDataDirectory(cloneId)
+        return File(dataDir, DIR_CACHE)
     }
 }

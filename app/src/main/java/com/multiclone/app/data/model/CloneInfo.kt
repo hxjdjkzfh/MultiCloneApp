@@ -1,52 +1,83 @@
 package com.multiclone.app.data.model
 
-import java.util.Date
+import android.os.Parcelable
+import kotlinx.parcelize.Parcelize
 import java.util.UUID
 
 /**
- * Represents information about a cloned app
+ * Represents information about a cloned application instance
  */
+@Parcelize
 data class CloneInfo(
+    // Unique identifier for this clone
     val id: String = UUID.randomUUID().toString(),
-    val packageName: String,
-    val displayName: String,
-    val storagePath: String = "",
-    val creationDate: Date = Date(),
-    val lastUsedDate: Date = Date(),
-    val notificationsEnabled: Boolean = true,
-    val customIconPath: String = ""
-) {
-    companion object {
-        /**
-         * Convert to a map for storage
-         */
-        fun toMap(cloneInfo: CloneInfo): Map<String, Any> {
-            return mapOf(
-                "id" to cloneInfo.id,
-                "packageName" to cloneInfo.packageName,
-                "displayName" to cloneInfo.displayName,
-                "storagePath" to cloneInfo.storagePath,
-                "creationDate" to cloneInfo.creationDate.time,
-                "lastUsedDate" to cloneInfo.lastUsedDate.time,
-                "notificationsEnabled" to cloneInfo.notificationsEnabled,
-                "customIconPath" to cloneInfo.customIconPath
-            )
-        }
+    
+    // Original app package name
+    val originalPackageName: String,
+    
+    // Custom name given to this clone
+    val customName: String,
+    
+    // Timestamp when this clone was created
+    val createdAt: Long = System.currentTimeMillis(),
+    
+    // Timestamp when this clone was last launched
+    val lastLaunchTime: Long = 0,
+    
+    // Number of times this clone has been launched
+    val launchCount: Int = 0,
+    
+    // Custom icon resource ID or path (if any)
+    val customIconPath: String? = null,
+    
+    // Custom color for this clone
+    val customColor: Int? = null,
+    
+    // Storage isolation level (0=shared, 1=isolated, 2=fully isolated)
+    val storageIsolationLevel: Int = 1,
+    
+    // Should the clone show custom notifications
+    val useCustomNotifications: Boolean = true,
+    
+    // Should the clone be shown in launcher
+    val showInLauncher: Boolean = true,
+    
+    // Environment version - used for upgrading clone environments
+    val environmentVersion: Int = 1,
+    
+    // Is this clone running
+    val isRunning: Boolean = false
+) : Parcelable {
+    
+    /**
+     * Get the internal package name used for this clone
+     */
+    fun getInternalPackageName(): String {
+        return "com.multiclone.app.virtual.$originalPackageName.$id"
+    }
+    
+    /**
+     * Get the display name for this clone
+     */
+    fun getDisplayName(): String {
+        return customName.ifEmpty { originalPackageName.split(".").last() }
+    }
+    
+    /**
+     * Check if the clone environment needs an update
+     */
+    fun needsEnvironmentUpdate(currentVersion: Int): Boolean {
+        return environmentVersion < currentVersion
+    }
+    
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is CloneInfo) return false
         
-        /**
-         * Create from a map from storage
-         */
-        fun fromMap(map: Map<String, Any>): CloneInfo {
-            return CloneInfo(
-                id = map["id"] as String,
-                packageName = map["packageName"] as String,
-                displayName = map["displayName"] as String,
-                storagePath = map["storagePath"] as String,
-                creationDate = Date(map["creationDate"] as Long),
-                lastUsedDate = Date(map["lastUsedDate"] as Long),
-                notificationsEnabled = map["notificationsEnabled"] as Boolean,
-                customIconPath = map["customIconPath"] as String
-            )
-        }
+        return id == other.id
+    }
+    
+    override fun hashCode(): Int {
+        return id.hashCode()
     }
 }

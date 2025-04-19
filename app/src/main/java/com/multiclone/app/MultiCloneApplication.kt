@@ -1,28 +1,38 @@
 package com.multiclone.app
 
-import android.app.Application
-import android.content.Intent
-import com.multiclone.app.core.virtualization.CloneManagerService
+import android.content.Context
+import androidx.multidex.MultiDex
+import androidx.multidex.MultiDexApplication
+import com.multiclone.app.BuildConfig
 import dagger.hilt.android.HiltAndroidApp
+import timber.log.Timber
 
-/**
- * Main application class with Hilt dependency injection
- */
 @HiltAndroidApp
-class MultiCloneApplication : Application() {
-    
+class MultiCloneApplication : MultiDexApplication() {
+
     override fun onCreate() {
         super.onCreate()
         
-        // Start clone manager service
-        startCloneManagerService()
+        // Initialize timber for logging
+        if (BuildConfig.DEBUG) {
+            Timber.plant(Timber.DebugTree())
+        }
+        
+        // Initialize virtualization engine
+        initVirtualizationEngine()
+    }
+
+    override fun attachBaseContext(base: Context) {
+        super.attachBaseContext(base)
+        MultiDex.install(this)
     }
     
-    /**
-     * Start the clone manager service
-     */
-    private fun startCloneManagerService() {
-        val serviceIntent = Intent(this, CloneManagerService::class.java)
-        startService(serviceIntent)
+    private fun initVirtualizationEngine() {
+        Timber.d("Initializing virtualization engine...")
+        // VirtualAppEngine initialization will be implemented here
+    }
+    
+    companion object {
+        const val TAG = "MultiCloneApp"
     }
 }

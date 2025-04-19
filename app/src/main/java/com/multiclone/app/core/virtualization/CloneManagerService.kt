@@ -4,36 +4,36 @@ import android.app.Service
 import android.content.Intent
 import android.os.Binder
 import android.os.IBinder
+import com.multiclone.app.data.model.AppInfo
+import com.multiclone.app.data.model.CloneInfo
 import com.multiclone.app.data.repository.CloneRepository
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
+import timber.log.Timber
 import javax.inject.Inject
 
 /**
- * Service for managing cloned apps
- * 
- * This service runs in the background to manage the lifecycle of cloned apps
- * and provide communication between the main app and cloned apps
+ * Service for managing cloned apps.
+ * Provides a binding interface for the UI to interact with the virtualization system.
  */
 @AndroidEntryPoint
 class CloneManagerService : Service() {
     
-    @Inject
-    lateinit var virtualAppEngine: VirtualAppEngine
+    // Binder given to clients
+    private val binder = LocalBinder()
+    
+    // Coroutine scope for background operations
+    private val serviceScope = CoroutineScope(Dispatchers.IO)
     
     @Inject
     lateinit var cloneRepository: CloneRepository
     
-    // Service binder for local binding
-    private val binder = LocalBinder()
+    @Inject
+    lateinit var virtualAppEngine: VirtualAppEngine
     
-    // Coroutine scope for service operations
-    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    
-    // Binder class for local binding
     inner class LocalBinder : Binder() {
         fun getService(): CloneManagerService = this@CloneManagerService
     }
@@ -44,64 +44,110 @@ class CloneManagerService : Service() {
     
     override fun onCreate() {
         super.onCreate()
+        Timber.d("CloneManagerService - onCreate")
         
-        // Initialize repository
+        // Initialize the virtualization engine
         serviceScope.launch {
-            cloneRepository.initialize()
+            virtualAppEngine.initialize()
         }
     }
     
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // Initialize environments for all active clones
-        serviceScope.launch {
-            initializeActiveClones()
-        }
-        
-        // Keep service running
-        return START_STICKY
+    override fun onDestroy() {
+        Timber.d("CloneManagerService - onDestroy")
+        super.onDestroy()
     }
     
     /**
-     * Initialize all active clone environments
+     * Get all clones
      */
-    private suspend fun initializeActiveClones() {
-        // In a production implementation, we would initialize all active clones here
-        // For now, we'll just initialize the repository
-        cloneRepository.initialize()
+    fun getClones(): Flow<List<CloneInfo>> {
+        return cloneRepository.getClones()
+    }
+    
+    /**
+     * Get all cloneable apps
+     */
+    suspend fun getCloneableApps(): List<AppInfo> {
+        return virtualAppEngine.getCloneableApps()
+    }
+    
+    /**
+     * Create a new clone
+     */
+    suspend fun createClone(appInfo: AppInfo, customName: String, isolationLevel: Int = 1,
+                           addToLauncher: Boolean = true): CloneInfo? {
+        return virtualAppEngine.createClone(appInfo, customName, isolationLevel, addToLauncher)
+    }
+    
+    /**
+     * Update an existing clone
+     */
+    suspend fun updateClone(cloneInfo: CloneInfo): Boolean {
+        return virtualAppEngine.updateClone(cloneInfo)
+    }
+    
+    /**
+     * Delete a clone
+     */
+    suspend fun deleteClone(cloneId: String): Boolean {
+        return virtualAppEngine.deleteClone(cloneId)
     }
     
     /**
      * Launch a cloned app
      */
-    fun launchClone(cloneId: String, packageName: String) {
-        // Create an intent to start the proxy activity
-        val intent = Intent(this, CloneProxyActivity::class.java).apply {
-            putExtra("clone_id", cloneId)
-            putExtra("package_name", packageName)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        startActivity(intent)
-        
-        // Update last used time
-        serviceScope.launch {
-            cloneRepository.updateLastUsedTime(cloneId)
-        }
+    suspend fun launchApp(cloneId: String): Boolean {
+        val cloneInfo = cloneRepository.getCloneById(cloneId) ?: return false
+        return virtualAppEngine.launchApp(cloneInfo)
     }
     
     /**
-     * Stop and cleanup a cloned app
+     * Get a specific clone by ID
      */
-    fun stopClone(cloneId: String) {
-        // Release the environment for this clone
-        virtualAppEngine.releaseEnvironment(cloneId)
+    suspend fun getCloneById(cloneId: String): CloneInfo? {
+        return cloneRepository.getCloneById(cloneId)
     }
     
-    override fun onDestroy() {
-        super.onDestroy()
-        
-        // Cleanup active environments
-        for (cloneId in virtualAppEngine.getActiveEnvironments().keys) {
-            virtualAppEngine.releaseEnvironment(cloneId)
-        }
+    /**
+     * Get clones by original package name
+     */
+    suspend fun getClonesByPackage(packageName: String): List<CloneInfo> {
+        return cloneRepository.getClonesByPackage(packageName)
+    }
+    
+    /**
+     * Check if a clone is running
+     */
+    fun isCloneRunning(cloneId: String): Boolean {
+        return virtualAppEngine.isCloneRunning(cloneId)
+    }
+    
+    /**
+     * Get all running clones
+     */
+    fun getRunningClones(): List<CloneInfo> {
+        return virtualAppEngine.getRunningClones()
+    }
+    
+    /**
+     * Stop a running cloned app
+     */
+    suspend fun stopApp(cloneId: String): Boolean {
+        val cloneInfo = cloneRepository.getCloneById(cloneId) ?: return false
+        return virtualAppEngine.stopApp(cloneInfo)
+    }
+    
+    /**
+     * Open a file from a clone environment
+     */
+    fun openFileFromClone(cloneId: String, filePath: String, mimeType: String): Boolean {
+        return virtualAppEngine.openFileFromClone(cloneId, filePath, mimeType)
+    }
+    
+    /**
+     * Share a file from a clone environment
+     */
+    fun shareFileFromClone(cloneId: String, filePath: String, mimeType: String, title: String): Boolean {
+        return virtualAppEngine.shareFileFromClone(cloneId, filePath, mimeType, title)
     }
 }

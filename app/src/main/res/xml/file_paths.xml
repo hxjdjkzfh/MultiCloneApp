@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<paths xmlns:android="http://schemas.android.com/apk/res/android">
-    <files-path name="app_files" path="app_clones/"/>
-    <cache-path name="app_cache" path="app_clones/"/>
-    <external-files-path name="external_files" path="app_clones/"/>
-    <external-cache-path name="external_cache" path="app_clones/"/>
+<paths>
+    <external-path name="external_files" path="." />
+    <files-path name="internal_files" path="." />
+    <cache-path name="cache" path="." />
+    <external-cache-path name="external_cache" path="." />
 </paths>
