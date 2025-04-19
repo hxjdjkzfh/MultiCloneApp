@@ -2,54 +2,72 @@ package com.multiclone.app.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Light Theme Colors
-val PrimaryLight = Color(0xFF2196F3)      // Blue
-val OnPrimaryLight = Color(0xFFFFFFFF)   // White
-val PrimaryContainerLight = Color(0xFFD1E4FF)  // Light Blue
-val OnPrimaryContainerLight = Color(0xFF001D36)  // Dark Blue
+// Light theme colors
+val md_theme_light_primary = Color(0xFF006494)
+val md_theme_light_onPrimary = Color(0xFFFFFFFF)
+val md_theme_light_primaryContainer = Color(0xFFCBE6FF)
+val md_theme_light_onPrimaryContainer = Color(0xFF001E30)
+val md_theme_light_secondary = Color(0xFF4C616D)
+val md_theme_light_onSecondary = Color(0xFFFFFFFF)
+val md_theme_light_secondaryContainer = Color(0xFFCFE6F4)
+val md_theme_light_onSecondaryContainer = Color(0xFF071E28)
+val md_theme_light_tertiary = Color(0xFF5F5A7D)
+val md_theme_light_onTertiary = Color(0xFFFFFFFF)
+val md_theme_light_tertiaryContainer = Color(0xFFE5DEFF)
+val md_theme_light_onTertiaryContainer = Color(0xFF1B1736)
+val md_theme_light_error = Color(0xFFBA1A1A)
+val md_theme_light_errorContainer = Color(0xFFFFDAD6)
+val md_theme_light_onError = Color(0xFFFFFFFF)
+val md_theme_light_onErrorContainer = Color(0xFF410002)
+val md_theme_light_background = Color(0xFFF8FDFF)
+val md_theme_light_onBackground = Color(0xFF001F25)
+val md_theme_light_surface = Color(0xFFF8FDFF)
+val md_theme_light_onSurface = Color(0xFF001F25)
+val md_theme_light_surfaceVariant = Color(0xFFDDE3EA)
+val md_theme_light_onSurfaceVariant = Color(0xFF41484D)
+val md_theme_light_outline = Color(0xFF71787E)
+val md_theme_light_inverseOnSurface = Color(0xFFD6F6FF)
+val md_theme_light_inverseSurface = Color(0xFF00363F)
+val md_theme_light_inversePrimary = Color(0xFF8FCDFF)
+val md_theme_light_shadow = Color(0xFF000000)
+val md_theme_light_surfaceTint = Color(0xFF006494)
+val md_theme_light_outlineVariant = Color(0xFFC1C7CE)
+val md_theme_light_scrim = Color(0xFF000000)
 
-val SecondaryLight = Color(0xFF03A9F4)   // Light Blue
-val OnSecondaryLight = Color(0xFFFFFFFF) // White
-val SecondaryContainerLight = Color(0xFFCCE5FF)  // Very Light Blue
-val OnSecondaryContainerLight = Color(0xFF001D36)  // Dark Blue
+// Dark theme colors
+val md_theme_dark_primary = Color(0xFF8FCDFF)
+val md_theme_dark_onPrimary = Color(0xFF00344F)
+val md_theme_dark_primaryContainer = Color(0xFF004B71)
+val md_theme_dark_onPrimaryContainer = Color(0xFFCBE6FF)
+val md_theme_dark_secondary = Color(0xFFB3CAD8)
+val md_theme_dark_onSecondary = Color(0xFF1D343F)
+val md_theme_dark_secondaryContainer = Color(0xFF344A55)
+val md_theme_dark_onSecondaryContainer = Color(0xFFCFE6F4)
+val md_theme_dark_tertiary = Color(0xFFC9C1EA)
+val md_theme_dark_onTertiary = Color(0xFF312C4C)
+val md_theme_dark_tertiaryContainer = Color(0xFF474364)
+val md_theme_dark_onTertiaryContainer = Color(0xFFE5DEFF)
+val md_theme_dark_error = Color(0xFFFFB4AB)
+val md_theme_dark_errorContainer = Color(0xFF93000A)
+val md_theme_dark_onError = Color(0xFF690005)
+val md_theme_dark_onErrorContainer = Color(0xFFFFDAD6)
+val md_theme_dark_background = Color(0xFF001F25)
+val md_theme_dark_onBackground = Color(0xFFA6EEFF)
+val md_theme_dark_surface = Color(0xFF001F25)
+val md_theme_dark_onSurface = Color(0xFFA6EEFF)
+val md_theme_dark_surfaceVariant = Color(0xFF41484D)
+val md_theme_dark_onSurfaceVariant = Color(0xFFC1C7CE)
+val md_theme_dark_outline = Color(0xFF8B9197)
+val md_theme_dark_inverseOnSurface = Color(0xFF001F25)
+val md_theme_dark_inverseSurface = Color(0xFFA6EEFF)
+val md_theme_dark_inversePrimary = Color(0xFF006494)
+val md_theme_dark_shadow = Color(0xFF000000)
+val md_theme_dark_surfaceTint = Color(0xFF8FCDFF)
+val md_theme_dark_outlineVariant = Color(0xFF41484D)
+val md_theme_dark_scrim = Color(0xFF000000)
 
-val TertiaryLight = Color(0xFF4CAF50)    // Green
-val OnTertiaryLight = Color(0xFFFFFFFF)  // White
-val TertiaryContainerLight = Color(0xFFB8F5B9)  // Light Green
-val OnTertiaryContainerLight = Color(0xFF002204)  // Very Dark Green
-
-val ErrorLight = Color(0xFFB3261E)       // Red
-val OnErrorLight = Color(0xFFFFFFFF)     // White
-val ErrorContainerLight = Color(0xFFF9DEDC)  // Light Red
-val OnErrorContainerLight = Color(0xFF410E0B)  // Dark Red
-
-val BackgroundLight = Color(0xFFF8F9FA)  // Off White
-val OnBackgroundLight = Color(0xFF1D1B20)  // Almost Black
-val SurfaceLight = Color(0xFFFEFBFF)     // White
-val OnSurfaceLight = Color(0xFF1D1B20)   // Almost Black
-
-// Dark Theme Colors
-val PrimaryDark = Color(0xFF90CAF9)      // Light Blue
-val OnPrimaryDark = Color(0xFF003258)    // Dark Blue
-val PrimaryContainerDark = Color(0xFF00497E)  // Medium Blue
-val OnPrimaryContainerDark = Color(0xFFD1E4FF)  // Light Blue
-
-val SecondaryDark = Color(0xFF81D4FA)    // Lighter Blue
-val OnSecondaryDark = Color(0xFF003258)  // Dark Blue
-val SecondaryContainerDark = Color(0xFF00497E)  // Medium Blue
-val OnSecondaryContainerDark = Color(0xFFCCE5FF)  // Very Light Blue
-
-val TertiaryDark = Color(0xFFA5D6A7)     // Light Green
-val OnTertiaryDark = Color(0xFF003A1D)   // Dark Green
-val TertiaryContainerDark = Color(0xFF0A5F12)  // Medium Green
-val OnTertiaryContainerDark = Color(0xFFB8F5B9)  // Light Green
-
-val ErrorDark = Color(0xFFF2B8B5)        // Light Red
-val OnErrorDark = Color(0xFF601410)      // Dark Red
-val ErrorContainerDark = Color(0xFF8C1D18)  // Medium Red
-val OnErrorContainerDark = Color(0xFFF9DEDC)  // Light Red
-
-val BackgroundDark = Color(0xFF1D1B20)   // Almost Black
-val OnBackgroundDark = Color(0xFFE6E1E5)  // Light Gray
-val SurfaceDark = Color(0xFF141218)      // Black
-val OnSurfaceDark = Color(0xFFE6E1E5)    // Light Gray
+// App-specific colors
+val CloneCardBackground = Color(0xFFF0F8FF)
+val CloneCardBackgroundDark = Color(0xFF162736)
+val CloneBadge = Color(0xFF3DDC84)
+val WarningColor = Color(0xFFFFA726)

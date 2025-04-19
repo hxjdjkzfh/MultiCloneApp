@@ -1,15 +1,13 @@
 package com.multiclone.app.data.model
 
-import android.graphics.Bitmap
-import android.os.Parcelable
-import kotlinx.parcelize.Parcelize
+import android.graphics.drawable.Drawable
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
 
 /**
- * Data class representing an installed app
+ * Represents information about an installed application.
+ * Contains details needed for displaying and cloning apps.
  */
-@Parcelize
 @Serializable
 data class AppInfo(
     val packageName: String,
@@ -17,8 +15,25 @@ data class AppInfo(
     val versionName: String,
     val versionCode: Long,
     val isSystemApp: Boolean = false,
+    val installTime: Long = 0,
+    val lastUpdateTime: Long = 0,
     
-    // Icon is marked as @Transient because it can't be serialized
+    // Transient properties that aren't serialized
     @Transient
-    val appIcon: Bitmap? = null
-) : Parcelable
+    val appIcon: Drawable? = null
+) {
+    companion object {
+        // Create a simplified app info object for testing or default values
+        fun createSimplified(packageName: String, appName: String): AppInfo {
+            return AppInfo(
+                packageName = packageName,
+                appName = appName,
+                versionName = "1.0",
+                versionCode = 1,
+                isSystemApp = false,
+                installTime = System.currentTimeMillis(),
+                lastUpdateTime = System.currentTimeMillis()
+            )
+        }
+    }
+}

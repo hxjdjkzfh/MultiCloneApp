@@ -1,6 +1,7 @@
 package com.multiclone.app.core.virtualization
 
 import android.content.Context
+import android.os.Environment
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import timber.log.Timber
@@ -9,132 +10,171 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Manages the virtual environment for cloned apps
+ * Manages virtual environments for cloned applications.
+ * Responsible for creating, configuring, and deleting the isolated
+ * filesystem environments for each app clone.
  */
 @Singleton
 class CloneEnvironment @Inject constructor(
     private val context: Context
 ) {
-    private val environmentsDir = File(context.filesDir, "environments")
-    private var isInitialized = false
+    companion object {
+        private const val ENVIRONMENTS_DIR = "clone_environments"
+        private const val DATA_DIR = "data"
+        private const val STORAGE_DIR = "storage"
+        private const val CONFIG_DIR = "config"
+    }
     
     /**
-     * Initialize the clone environment
+     * Creates a new virtual environment for a cloned app
+     * 
+     * @param cloneId Unique identifier for the clone
+     * @param packageName Package name of the original app
+     * @return Success status of the operation
      */
-    suspend fun initialize(): Boolean = withContext(Dispatchers.IO) {
-        Timber.d("Initializing clone environment")
-        
-        try {
-            // Create the environments directory if it doesn't exist
-            if (!environmentsDir.exists()) {
-                val result = environmentsDir.mkdirs()
-                if (!result) {
-                    Timber.e("Failed to create environments directory")
+    suspend fun createEnvironment(cloneId: String, packageName: String): Boolean = 
+        withContext(Dispatchers.IO) {
+            try {
+                Timber.d("Creating environment for clone $cloneId ($packageName)")
+                
+                // Get base directory for all environments
+                val baseDir = getBaseEnvironmentsDirectory()
+                if (!baseDir.exists() && !baseDir.mkdirs()) {
+                    Timber.e("Failed to create base environments directory")
                     return@withContext false
                 }
-            }
-            
-            // Setup any global requirements for the virtualization environment
-            // In a real implementation, this might involve creating shared libraries,
-            // setting up security contexts, etc.
-            
-            isInitialized = true
-            Timber.d("Clone environment initialized successfully")
-            return@withContext true
-        } catch (e: Exception) {
-            Timber.e(e, "Error initializing clone environment")
-            return@withContext false
-        }
-    }
-    
-    /**
-     * Prepare the environment for a specific app
-     */
-    suspend fun prepareAppEnvironment(cloneId: String, packageName: String): Boolean = withContext(Dispatchers.IO) {
-        Timber.d("Preparing environment for clone $cloneId (package: $packageName)")
-        
-        if (!isInitialized) {
-            Timber.e("Clone environment not initialized")
-            return@withContext false
-        }
-        
-        try {
-            // Create a directory for this specific clone
-            val cloneDir = File(environmentsDir, cloneId)
-            if (!cloneDir.exists()) {
-                val result = cloneDir.mkdirs()
-                if (!result) {
-                    Timber.e("Failed to create directory for clone: $cloneId")
+                
+                // Create environment directory structure
+                val envDir = File(baseDir, cloneId)
+                if (envDir.exists()) {
+                    Timber.w("Environment directory already exists for $cloneId, deleting first")
+                    if (!envDir.deleteRecursively()) {
+                        Timber.e("Failed to delete existing environment directory")
+                        return@withContext false
+                    }
+                }
+                
+                // Create main directories
+                if (!envDir.mkdirs()) {
+                    Timber.e("Failed to create environment directory")
                     return@withContext false
                 }
-            }
-            
-            // Create subdirectories for app data
-            val dataDir = File(cloneDir, "data")
-            val cacheDir = File(cloneDir, "cache")
-            val filesDir = File(cloneDir, "files")
-            
-            if (!dataDir.exists()) dataDir.mkdirs()
-            if (!cacheDir.exists()) cacheDir.mkdirs()
-            if (!filesDir.exists()) filesDir.mkdirs()
-            
-            // In a real implementation, this would involve more sophisticated setup:
-            // - Setting up container or sandbox environment
-            // - Configuring security and isolation
-            // - Preparing filesystem mounts and redirections
-            // - Setting up IPC channels
-            
-            Timber.d("Environment prepared for clone $cloneId")
-            return@withContext true
-        } catch (e: Exception) {
-            Timber.e(e, "Error preparing environment for clone: $cloneId")
-            return@withContext false
-        }
-    }
-    
-    /**
-     * Clean up the environment for a specific app
-     */
-    suspend fun cleanupAppEnvironment(cloneId: String): Boolean = withContext(Dispatchers.IO) {
-        Timber.d("Cleaning up environment for clone $cloneId")
-        
-        try {
-            val cloneDir = File(environmentsDir, cloneId)
-            if (cloneDir.exists()) {
-                // Recursively delete the clone directory and all its contents
-                val result = cloneDir.deleteRecursively()
-                if (!result) {
-                    Timber.e("Failed to clean up directory for clone: $cloneId")
+                
+                // Create subdirectories
+                val dataDir = File(envDir, DATA_DIR)
+                val storageDir = File(envDir, STORAGE_DIR)
+                val configDir = File(envDir, CONFIG_DIR)
+                
+                if (!dataDir.mkdirs() || !storageDir.mkdirs() || !configDir.mkdirs()) {
+                    Timber.e("Failed to create environment subdirectories")
+                    envDir.deleteRecursively()
                     return@withContext false
                 }
+                
+                // Create package specific subdirectories
+                val packageDataDir = File(dataDir, packageName)
+                if (!packageDataDir.mkdirs()) {
+                    Timber.e("Failed to create package data directory")
+                    envDir.deleteRecursively()
+                    return@withContext false
+                }
+                
+                // Create configuration file
+                val configFile = File(configDir, "environment.json")
+                configFile.writeText("""
+                    {
+                        "cloneId": "$cloneId",
+                        "packageName": "$packageName",
+                        "created": ${System.currentTimeMillis()},
+                        "version": 1
+                    }
+                """.trimIndent())
+                
+                Timber.d("Successfully created environment for clone $cloneId")
+                return@withContext true
+            } catch (e: Exception) {
+                Timber.e(e, "Error creating environment for clone $cloneId")
+                // Attempt cleanup on failure
+                try {
+                    val baseDir = getBaseEnvironmentsDirectory()
+                    val envDir = File(baseDir, cloneId)
+                    if (envDir.exists()) {
+                        envDir.deleteRecursively()
+                    }
+                } catch (cleanupError: Exception) {
+                    Timber.e(cleanupError, "Error during cleanup after failed environment creation")
+                }
+                return@withContext false
+            }
+        }
+    
+    /**
+     * Deletes a virtual environment for a cloned app
+     * 
+     * @param cloneId Unique identifier for the clone to delete
+     * @return Success status of the operation
+     */
+    suspend fun deleteEnvironment(cloneId: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            Timber.d("Deleting environment for clone $cloneId")
+            
+            val envDir = File(getBaseEnvironmentsDirectory(), cloneId)
+            if (!envDir.exists()) {
+                Timber.w("Environment directory doesn't exist for $cloneId")
+                return@withContext true // Already deleted
             }
             
-            Timber.d("Environment cleaned up for clone $cloneId")
+            if (!envDir.deleteRecursively()) {
+                Timber.e("Failed to delete environment directory for $cloneId")
+                return@withContext false
+            }
+            
+            Timber.d("Successfully deleted environment for clone $cloneId")
             return@withContext true
         } catch (e: Exception) {
-            Timber.e(e, "Error cleaning up environment for clone: $cloneId")
+            Timber.e(e, "Error deleting environment for clone $cloneId")
             return@withContext false
         }
     }
     
     /**
-     * Get the data directory for a cloned app
+     * Gets the directory for a specific clone environment
+     * 
+     * @param cloneId Unique identifier for the clone
+     * @return The environment directory
      */
-    fun getCloneDataDir(cloneId: String): File {
-        return File(File(environmentsDir, cloneId), "data")
+    fun getEnvironmentDirectory(cloneId: String): File {
+        return File(getBaseEnvironmentsDirectory(), cloneId)
     }
     
     /**
-     * Get the cache directory for a cloned app
+     * Gets the data directory within a clone's environment
+     * 
+     * @param cloneId Unique identifier for the clone
+     * @return The data directory for the clone
      */
-    fun getCloneCacheDir(cloneId: String): File {
-        return File(File(environmentsDir, cloneId), "cache")
+    fun getDataDirectory(cloneId: String): File {
+        return File(getEnvironmentDirectory(cloneId), DATA_DIR)
     }
     
     /**
-     * Get the files directory for a cloned app
+     * Gets the storage directory within a clone's environment
+     * 
+     * @param cloneId Unique identifier for the clone
+     * @return The storage directory for the clone
      */
-    fun getCloneFilesDir(cloneId: String): File {
-        return File(File(environmentsDir, cloneId), "files")
+    fun getStorageDirectory(cloneId: String): File {
+        return File(getEnvironmentDirectory(cloneId), STORAGE_DIR)
+    }
+    
+    /**
+     * Gets the base directory for all environments
+     * 
+     * @return The base environments directory
+     */
+    private fun getBaseEnvironmentsDirectory(): File {
+        // Use app's files directory rather than external storage
+        // for better security and to avoid storage permission issues
+        return File(context.filesDir, ENVIRONMENTS_DIR)
     }
 }

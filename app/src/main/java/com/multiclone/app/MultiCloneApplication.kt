@@ -1,60 +1,47 @@
 package com.multiclone.app
 
 import android.app.Application
+import android.content.Intent
+import androidx.multidex.MultiDexApplication
 import com.multiclone.app.core.virtualization.CloneManagerService
-import com.multiclone.app.core.virtualization.VirtualizationService
 import dagger.hilt.android.HiltAndroidApp
-import kotlinx.serialization.json.Json
 import timber.log.Timber
-import javax.inject.Inject
 
 /**
- * Application class for MultiClone App
+ * Main application class for MultiClone App.
+ * Initializes essential components for the app.
  */
 @HiltAndroidApp
-class MultiCloneApplication : Application() {
-    
-    @Inject
-    lateinit var virtualizationService: VirtualizationService.Impl
-    
+class MultiCloneApplication : MultiDexApplication() {
+
     override fun onCreate() {
         super.onCreate()
         
-        // Initialize Timber for logging
+        // Initialize logging
         if (BuildConfig.DEBUG) {
             Timber.plant(Timber.DebugTree())
         }
         
-        Timber.d("MultiClone App initialized")
-        
-        // Start the virtualization service
-        virtualizationService.startService()
-        
         // Start the clone manager service
-        CloneManagerService.start(this)
+        startCloneManagerService()
+    }
+    
+    /**
+     * Starts the background service that manages app clones
+     */
+    private fun startCloneManagerService() {
+        try {
+            val intent = Intent(this, CloneManagerService::class.java)
+            startService(intent)
+            Timber.d("Clone Manager Service started successfully")
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to start Clone Manager Service")
+        }
     }
     
     override fun onTerminate() {
+        // Clean up resources
+        Timber.d("Application terminating")
         super.onTerminate()
-        
-        // Stop the virtualization service
-        virtualizationService.stopService()
-        
-        // Stop the clone manager service
-        CloneManagerService.stop(this)
-        
-        Timber.d("MultiClone App terminated")
-    }
-    
-    companion object {
-        /**
-         * Singleton JSON instance for serialization/deserialization
-         */
-        val json = Json {
-            ignoreUnknownKeys = true
-            isLenient = true
-            prettyPrint = false
-            encodeDefaults = true
-        }
     }
 }

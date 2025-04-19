@@ -1,48 +1,74 @@
 package com.multiclone.app.data.model
 
-import android.graphics.Bitmap
-import android.os.Parcelable
-import kotlinx.parcelize.Parcelize
+import android.graphics.drawable.Drawable
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
 import java.util.UUID
 
 /**
- * Data class representing a cloned app
+ * Represents information about a cloned app instance.
+ * Contains the metadata and configuration for a specific clone.
  */
-@Parcelize
 @Serializable
 data class CloneInfo(
-    val id: String = UUID.randomUUID().toString(),
+    val id: String,
     val packageName: String,
     val originalAppName: String,
     val cloneName: String,
-    val versionName: String,
-    val versionCode: Long,
-    val createdAt: Long = System.currentTimeMillis(),
-    val lastUsedAt: Long = System.currentTimeMillis(),
-    val isRunning: Boolean = false,
+    val creationTime: Long,
+    val lastLaunchTime: Long = 0,
+    val launchCount: Int = 0,
+    val customIconPath: String? = null,
+    val badgeColor: Int? = null,
+    val notifications: Boolean = true,
     
-    // Custom icon and original icon are marked as @Transient because Bitmap can't be serialized
+    // Transient properties that aren't serialized
     @Transient
-    val customIcon: Bitmap? = null,
-    
+    val icon: Drawable? = null,
     @Transient
-    val originalIcon: Bitmap? = null
-) : Parcelable {
+    val originalAppIcon: Drawable? = null
+) {
     companion object {
         /**
-         * Creates a new CloneInfo from an AppInfo
+         * Create a new CloneInfo with a unique ID
          */
-        fun fromAppInfo(appInfo: AppInfo, cloneName: String): CloneInfo {
+        fun create(
+            packageName: String,
+            originalAppName: String,
+            cloneName: String,
+            customIconPath: String? = null,
+            badgeColor: Int? = null
+        ): CloneInfo {
             return CloneInfo(
-                packageName = appInfo.packageName,
-                originalAppName = appInfo.appName,
+                id = UUID.randomUUID().toString(),
+                packageName = packageName,
+                originalAppName = originalAppName,
                 cloneName = cloneName,
-                versionName = appInfo.versionName,
-                versionCode = appInfo.versionCode,
-                originalIcon = appInfo.appIcon
+                creationTime = System.currentTimeMillis(),
+                customIconPath = customIconPath,
+                badgeColor = badgeColor
             )
+        }
+    }
+    
+    /**
+     * Creates a copy of the CloneInfo with updated last launch time and count
+     */
+    fun recordLaunch(): CloneInfo {
+        return copy(
+            lastLaunchTime = System.currentTimeMillis(),
+            launchCount = launchCount + 1
+        )
+    }
+    
+    /**
+     * Gets the effective name to display for this clone
+     */
+    fun getDisplayName(): String {
+        return if (cloneName.isNotBlank()) {
+            cloneName
+        } else {
+            "$originalAppName (Clone)"
         }
     }
 }
