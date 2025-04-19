@@ -2,125 +2,83 @@ package com.multiclone.app.core.virtualization
 
 import android.content.Context
 import android.util.Log
+import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
+import javax.inject.Inject
+import javax.inject.Singleton
 
 /**
- * Manages the virtual environment for a specific clone instance
+ * Manages isolated environments for cloned apps
  */
-class CloneEnvironment(
-    private val context: Context,
-    val cloneId: String,
-    val packageName: String,
-    val displayName: String
+@Singleton
+class CloneEnvironment @Inject constructor(
+    @ApplicationContext private val context: Context
 ) {
-    companion object {
-        private const val TAG = "CloneEnvironment"
+    private val TAG = "CloneEnvironment"
+    private val rootDir: File by lazy {
+        context.getDir("clone_environments", Context.MODE_PRIVATE)
     }
     
-    // Directory for this clone's data
-    private val cloneDir: File by lazy {
-        File(context.getDir("clones", Context.MODE_PRIVATE), cloneId).apply {
-            if (!exists()) {
-                mkdirs()
-            }
+    /**
+     * Initialize the environment
+     */
+    fun initialize() {
+        // Create root directory if it doesn't exist
+        if (!rootDir.exists()) {
+            rootDir.mkdirs()
         }
+        
+        Log.d(TAG, "Initialized clone environment at: ${rootDir.absolutePath}")
     }
     
-    // Directory for this clone's private data
-    private val privateDataDir: File by lazy {
-        File(cloneDir, "data").apply {
-            if (!exists()) {
-                mkdirs()
-            }
+    /**
+     * Create a new environment for a clone
+     */
+    fun createEnvironment(cloneId: String, packageName: String): String {
+        val cloneDir = File(rootDir, "${packageName}_$cloneId")
+        if (!cloneDir.exists()) {
+            cloneDir.mkdirs()
+            
+            // Create subdirectories needed for the virtual environment
+            File(cloneDir, "data").mkdirs()
+            File(cloneDir, "cache").mkdirs()
+            File(cloneDir, "shared_prefs").mkdirs()
+            
+            Log.d(TAG, "Created new environment for $packageName at: ${cloneDir.absolutePath}")
         }
+        
+        return cloneDir.absolutePath
     }
     
-    // Directory for this clone's shared data
-    private val sharedDataDir: File by lazy {
-        File(cloneDir, "shared").apply {
-            if (!exists()) {
-                mkdirs()
-            }
+    /**
+     * Delete an existing environment
+     */
+    fun deleteEnvironment(cloneId: String, packageName: String): Boolean {
+        val cloneDir = File(rootDir, "${packageName}_$cloneId")
+        if (cloneDir.exists()) {
+            val result = cloneDir.deleteRecursively()
+            Log.d(TAG, "Deleted environment for $packageName (success: $result)")
+            return result
         }
+        return true // Environment didn't exist, considered successful
     }
     
     /**
-     * Prepare the environment for launch
+     * Get the storage path for a clone's environment
      */
-    fun prepare() {
-        Log.d(TAG, "Preparing environment for clone $cloneId ($displayName)")
-        
-        // Create necessary directories
-        ensureDirectoriesExist()
-        
-        // Set up environment variables
-        setupEnvironmentVariables()
-        
-        // Mount virtual file system if needed
-        mountVirtualFileSystem()
+    fun getEnvironmentPath(cloneId: String, packageName: String): String {
+        val cloneDir = File(rootDir, "${packageName}_$cloneId")
+        if (!cloneDir.exists()) {
+            cloneDir.mkdirs()
+        }
+        return cloneDir.absolutePath
     }
     
     /**
-     * Ensure all necessary directories exist
+     * Clean up unused environments
      */
-    private fun ensureDirectoriesExist() {
-        // Create directories for app data
-        privateDataDir
-        sharedDataDir
-        
-        // Create additional directories as needed
-        File(privateDataDir, "shared_prefs").mkdirs()
-        File(privateDataDir, "databases").mkdirs()
-        File(privateDataDir, "files").mkdirs()
-        File(privateDataDir, "cache").mkdirs()
-    }
-    
-    /**
-     * Set up environment variables for this clone
-     */
-    private fun setupEnvironmentVariables() {
-        // Implementation will depend on the Android version and virtualization technique
-        // This would typically modify the app's view of system properties and environment variables
-        Log.d(TAG, "Setting up environment variables for clone $cloneId")
-    }
-    
-    /**
-     * Mount any virtual file systems needed
-     */
-    private fun mountVirtualFileSystem() {
-        // Implementation will depend on virtualization technique
-        // This would typically redirect file operations to the clone's private directories
-        Log.d(TAG, "Mounting virtual file system for clone $cloneId")
-    }
-    
-    /**
-     * Clean up resources when environment is no longer needed
-     */
-    fun cleanup() {
-        Log.d(TAG, "Cleaning up environment for clone $cloneId")
-        
-        // Unmount virtual file systems
-        unmountVirtualFileSystem()
-        
-        // Clear any cached data that shouldn't persist
-        clearTemporaryData()
-    }
-    
-    /**
-     * Unmount virtual file systems
-     */
-    private fun unmountVirtualFileSystem() {
-        // Implementation will depend on virtualization technique
-        Log.d(TAG, "Unmounting virtual file system for clone $cloneId")
-    }
-    
-    /**
-     * Clear temporary data that shouldn't persist
-     */
-    private fun clearTemporaryData() {
-        // Delete temporary files
-        File(privateDataDir, "cache").listFiles()?.forEach { it.delete() }
-        
-        Log.d(TAG, "Temporary data cleared for clone $cloneId")
+    fun cleanupUnusedEnvironments() {
+        // This method would check for and remove environments that are no longer referenced
+        // in the clone repository, for example after app uninstallations
     }
 }

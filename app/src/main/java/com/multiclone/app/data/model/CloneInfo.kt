@@ -1,38 +1,39 @@
 package com.multiclone.app.data.model
 
-import android.graphics.drawable.Drawable
+import android.os.Parcelable
+import kotlinx.parcelize.Parcelize
 
 /**
- * Represents information about a cloned application
+ * Information about a cloned application
  */
+@Parcelize
 data class CloneInfo(
-    // Unique identifier for this clone
     val id: String,
-    
-    // Package name of the original app
     val packageName: String,
-    
-    // Custom display name for this clone
     val displayName: String,
-    
-    // Custom icon for this clone (null means use original app icon)
-    val customIcon: Drawable? = null,
-    
-    // Original app icon
-    val originalIcon: Drawable? = null,
-    
-    // Time when this clone was created
+    val iconPath: String?, // Path to custom icon if set
     val creationTime: Long,
-    
-    // Time when this clone was last used
     val lastUsedTime: Long,
-    
-    // User-defined color for this clone (used for UI/theming)
-    val colorHex: String? = null,
-    
-    // Whether notifications are enabled for this clone
-    val notificationsEnabled: Boolean = true,
-    
-    // Whether this clone is frozen (won't receive updates)
-    val isFrozen: Boolean = false
-)
+    val notificationsEnabled: Boolean,
+    val storageLocation: String, // Path to the clone storage directory
+    val customSettings: Map<String, String> = mapOf() // Additional settings
+) : Parcelable {
+    companion object {
+        /**
+         * Creates a new CloneInfo for a package with default settings
+         */
+        fun create(packageName: String, displayName: String, storageLocation: String): CloneInfo {
+            val currentTime = System.currentTimeMillis()
+            return CloneInfo(
+                id = java.util.UUID.randomUUID().toString(),
+                packageName = packageName,
+                displayName = displayName,
+                iconPath = null,
+                creationTime = currentTime,
+                lastUsedTime = currentTime,
+                notificationsEnabled = true,
+                storageLocation = storageLocation
+            )
+        }
+    }
+}

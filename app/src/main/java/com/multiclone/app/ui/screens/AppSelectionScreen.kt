@@ -1,39 +1,21 @@
 package com.multiclone.app.ui.screens
 
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TopAppBar
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.multiclone.app.data.model.AppInfo
-import com.multiclone.app.ui.components.AppItem
-import com.multiclone.app.viewmodel.AppSelectionViewModel
+import com.multiclone.app.ui.viewmodels.AppSelectionViewModel
 
 /**
  * Screen for selecting an app to clone
@@ -41,25 +23,52 @@ import com.multiclone.app.viewmodel.AppSelectionViewModel
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppSelectionScreen(
-    onBackPressed: () -> Unit,
+    onNavigateBack: () -> Unit,
     onAppSelected: (AppInfo) -> Unit,
     viewModel: AppSelectionViewModel = hiltViewModel()
 ) {
-    val apps by viewModel.apps.collectAsState()
+    val installedApps by viewModel.installedApps.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val error by viewModel.error.collectAsState()
+    
+    // Search state
     var searchQuery by remember { mutableStateOf("") }
+    
+    // Filter apps based on search query
+    val filteredApps = remember(installedApps, searchQuery) {
+        if (searchQuery.isBlank()) {
+            installedApps
+        } else {
+            installedApps.filter { 
+                it.appName.contains(searchQuery, ignoreCase = true) ||
+                it.packageName.contains(searchQuery, ignoreCase = true)
+            }
+        }
+    }
+    
+    // Handle error
+    LaunchedEffect(error) {
+        error?.let {
+            // In a real app, you would show a snackbar or dialog
+            // For now, just reset the error after showing it
+            viewModel.clearError()
+        }
+    }
     
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Select App to Clone") },
                 navigationIcon = {
-                    IconButton(onClick = onBackPressed) {
+                    IconButton(onClick = onNavigateBack) {
                         Icon(
                             imageVector = Icons.Default.ArrowBack,
                             contentDescription = "Back"
                         )
                     }
+                },
+                actions = {
+                    // Refresh button could be added here
                 }
             )
         }
@@ -69,54 +78,105 @@ fun AppSelectionScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // Search field
-            TextField(
+            // Search bar
+            OutlinedTextField(
                 value = searchQuery,
-                onValueChange = {
-                    searchQuery = it
-                    viewModel.searchApps(it)
-                },
+                onValueChange = { searchQuery = it },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp),
-                placeholder = { Text("Search apps...") },
-                trailingIcon = {
-                    Icon(Icons.Default.Search, contentDescription = "Search")
+                label = { Text("Search Apps") },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = "Search"
+                    )
                 },
                 singleLine = true
             )
             
-            Spacer(modifier = Modifier.height(8.dp))
-            
             if (isLoading) {
+                // Loading indicator
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
                     CircularProgressIndicator()
                 }
-            } else if (apps.isEmpty()) {
+            } else if (filteredApps.isEmpty()) {
+                // Empty state
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = if (searchQuery.isBlank()) "No apps found" else "No matching apps found",
+                        text = if (searchQuery.isBlank()) 
+                            "No apps found" 
+                        else 
+                            "No apps match '$searchQuery'",
                         style = MaterialTheme.typography.bodyLarge
                     )
                 }
             } else {
+                // List of apps
                 LazyColumn(
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    items(apps) { app ->
+                    items(filteredApps) { app ->
                         AppItem(
-                            appInfo = app,
+                            app = app,
                             onClick = { onAppSelected(app) }
                         )
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * Individual app item in the list
+ */
+@Composable
+fun AppItem(
+    app: AppInfo,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // App icon
+        Icon(
+            imageVector = Icons.Default.Search, // Placeholder, should be app.icon
+            contentDescription = null,
+            modifier = Modifier
+                .size(48.dp)
+                .padding(end = 16.dp)
+        )
+        
+        // App info
+        Column(
+            modifier = Modifier.weight(1f)
+        ) {
+            // App name
+            Text(
+                text = app.appName,
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            
+            // Package name
+            Text(
+                text = app.packageName,
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }

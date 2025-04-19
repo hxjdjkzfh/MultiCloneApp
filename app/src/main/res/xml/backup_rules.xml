@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <full-backup-content>
-    <include domain="file" path="clones"/>
-    <include domain="file" path="virtual_registry"/>
-    <include domain="file" path="virtual_environments"/>
-    <exclude domain="file" path="temp"/>
+    <!-- Exclude sensitive information -->
+    <exclude domain="sharedpref" path="encrypted_preferences.xml"/>
+    <exclude domain="database" path="cloneData.db"/>
 </full-backup-content>

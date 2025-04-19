@@ -1,305 +1,217 @@
 package com.multiclone.app.data.repository
 
 import android.content.Context
-import android.util.Log
-import com.multiclone.app.core.virtualization.VirtualAppEngine
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
 import com.multiclone.app.data.model.CloneInfo
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
-import java.io.File
-import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Repository for managing cloned app data
+ * Repository for managing cloned applications data
  */
 @Singleton
 class CloneRepository @Inject constructor(
-    private val context: Context,
-    private val virtualAppEngine: VirtualAppEngine
+    @ApplicationContext private val context: Context
 ) {
-    companion object {
-        private const val TAG = "CloneRepository"
-    }
-    
-    // In-memory cache of clones
     private val _clones = MutableStateFlow<List<CloneInfo>>(emptyList())
     val clones: Flow<List<CloneInfo>> = _clones.asStateFlow()
     
-    // Root directory for clone data
-    private val clonesRootDir by lazy {
-        context.getDir("clones", Context.MODE_PRIVATE)
+    // Using EncryptedSharedPreferences for secure storage
+    private val encryptedPrefs by lazy {
+        val masterKey = MasterKey.Builder(context)
+            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+            .build()
+        
+        EncryptedSharedPreferences.create(
+            context,
+            "clone_data",
+            masterKey,
+            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+        )
     }
     
     /**
-     * Initialize the repository
+     * Initialize the repository and load saved clones
      */
     suspend fun initialize() = withContext(Dispatchers.IO) {
-        Log.d(TAG, "Initializing repository")
-        
-        // Load existing clones
-        loadExistingClones()
+        val savedClones = loadClonesFromStorage()
+        _clones.value = savedClones
     }
     
     /**
-     * Load all existing clones from storage
+     * Create a new clone
      */
-    private suspend fun loadExistingClones() = withContext(Dispatchers.IO) {
-        val clonesList = mutableListOf<CloneInfo>()
+    suspend fun createClone(packageName: String, displayName: String): CloneInfo? = withContext(Dispatchers.IO) {
+        // Create a storage location for the clone
+        val storageDir = context.getDir("clones", Context.MODE_PRIVATE).absolutePath + "/${packageName}_${System.currentTimeMillis()}"
         
-        // Check if clones directory exists
-        if (!clonesRootDir.exists()) {
-            clonesRootDir.mkdirs()
-            _clones.value = clonesList
-            return@withContext
-        }
-        
-        // List all clone directories
-        val cloneDirs = clonesRootDir.listFiles()
-        if (cloneDirs == null || cloneDirs.isEmpty()) {
-            _clones.value = clonesList
-            return@withContext
-        }
-        
-        // Load each clone
-        for (cloneDir in cloneDirs) {
-            val configFile = File(cloneDir, "config.json")
-            if (!configFile.exists()) continue
+        try {
+            // Create the clone info
+            val cloneInfo = CloneInfo.create(packageName, displayName, storageDir)
             
-            try {
-                val json = JSONObject(configFile.readText())
-                val packageName = json.optString("packageName", "")
-                val displayName = json.optString("displayName", "")
-                val createdAt = json.optLong("createdAt", System.currentTimeMillis())
-                val lastUsed = json.optLong("lastUsed", createdAt)
-                val colorHex = json.optString("colorHex", null)
-                val notificationsEnabled = json.optBoolean("notificationsEnabled", true)
-                val isFrozen = json.optBoolean("isFrozen", false)
-                
-                if (packageName.isNotEmpty()) {
-                    // Try to get app icon from package manager
-                    val originalIcon = try {
-                        context.packageManager.getApplicationIcon(packageName)
+            // Save to shared preferences
+            saveClone(cloneInfo)
+            
+            // Update the mutable state flow
+            val currentClones = _clones.value.toMutableList()
+            currentClones.add(cloneInfo)
+            _clones.value = currentClones
+            
+            return@withContext cloneInfo
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return@withContext null
+        }
+    }
+    
+    /**
+     * Delete a clone by ID
+     */
+    suspend fun deleteClone(cloneId: String) = withContext(Dispatchers.IO) {
+        val currentClones = _clones.value.toMutableList()
+        val cloneToRemove = currentClones.find { it.id == cloneId } ?: return@withContext
+        
+        // Remove from shared preferences
+        encryptedPrefs.edit().remove(cloneId).apply()
+        
+        // Remove from memory
+        currentClones.remove(cloneToRemove)
+        _clones.value = currentClones
+    }
+    
+    /**
+     * Update notification settings for a clone
+     */
+    suspend fun updateNotificationSettings(cloneId: String, enabled: Boolean) = withContext(Dispatchers.IO) {
+        val currentClones = _clones.value.toMutableList()
+        val cloneIndex = currentClones.indexOfFirst { it.id == cloneId }
+        
+        if (cloneIndex != -1) {
+            val clone = currentClones[cloneIndex]
+            val updatedClone = clone.copy(notificationsEnabled = enabled)
+            
+            // Save updated clone
+            saveClone(updatedClone)
+            
+            // Update in memory
+            currentClones[cloneIndex] = updatedClone
+            _clones.value = currentClones
+        }
+    }
+    
+    /**
+     * Update last used time for a clone
+     */
+    suspend fun updateLastUsedTime(cloneId: String) = withContext(Dispatchers.IO) {
+        val currentClones = _clones.value.toMutableList()
+        val cloneIndex = currentClones.indexOfFirst { it.id == cloneId }
+        
+        if (cloneIndex != -1) {
+            val clone = currentClones[cloneIndex]
+            val updatedClone = clone.copy(lastUsedTime = System.currentTimeMillis())
+            
+            // Save updated clone
+            saveClone(updatedClone)
+            
+            // Update in memory
+            currentClones[cloneIndex] = updatedClone
+            _clones.value = currentClones
+        }
+    }
+    
+    /**
+     * Load all clones from encrypted storage
+     */
+    private fun loadClonesFromStorage(): List<CloneInfo> {
+        val clones = mutableListOf<CloneInfo>()
+        
+        try {
+            // Read all preferences
+            val allEntries = encryptedPrefs.all
+            
+            for ((_, value) in allEntries) {
+                if (value is String) {
+                    try {
+                        val clone = deserializeClone(value)
+                        clones.add(clone)
                     } catch (e: Exception) {
-                        null
+                        e.printStackTrace()
+                        // Skip invalid entries
                     }
-                    
-                    // Create clone info object
-                    val cloneInfo = CloneInfo(
-                        id = cloneDir.name,
-                        packageName = packageName,
-                        displayName = displayName,
-                        originalIcon = originalIcon,
-                        creationTime = createdAt,
-                        lastUsedTime = lastUsed,
-                        colorHex = colorHex,
-                        notificationsEnabled = notificationsEnabled,
-                        isFrozen = isFrozen
-                    )
-                    
-                    clonesList.add(cloneInfo)
                 }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error parsing clone config file", e)
             }
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
         
-        // Sort by last used time (most recent first)
-        clonesList.sortByDescending { it.lastUsedTime }
+        return clones
+    }
+    
+    /**
+     * Save a clone to encrypted storage
+     */
+    private fun saveClone(clone: CloneInfo) {
+        val serialized = serializeClone(clone)
+        encryptedPrefs.edit().putString(clone.id, serialized).apply()
+    }
+    
+    /**
+     * Serialize a CloneInfo object to JSON string
+     */
+    private fun serializeClone(clone: CloneInfo): String {
+        val json = JSONObject()
+        json.put("id", clone.id)
+        json.put("packageName", clone.packageName)
+        json.put("displayName", clone.displayName)
+        json.put("iconPath", clone.iconPath ?: "")
+        json.put("creationTime", clone.creationTime)
+        json.put("lastUsedTime", clone.lastUsedTime)
+        json.put("notificationsEnabled", clone.notificationsEnabled)
+        json.put("storageLocation", clone.storageLocation)
         
-        // Update state flow
-        _clones.value = clonesList
-    }
-    
-    /**
-     * Create a new clone of an app
-     */
-    suspend fun createClone(
-        packageName: String,
-        displayName: String,
-        customIcon: File? = null,
-        colorHex: String? = null
-    ): CloneInfo? = withContext(Dispatchers.IO) {
-        try {
-            // Generate a unique ID for this clone
-            val cloneId = UUID.randomUUID().toString()
-            
-            // Create the clone using the VirtualAppEngine
-            val result = virtualAppEngine.createClone(packageName, cloneId, displayName)
-            
-            if (result) {
-                // Get original app icon
-                val originalIcon = try {
-                    context.packageManager.getApplicationIcon(packageName)
-                } catch (e: Exception) {
-                    null
-                }
-                
-                // Create config file with additional metadata
-                val cloneDir = File(clonesRootDir, cloneId)
-                val configFile = File(cloneDir, "config.json")
-                
-                val creationTime = System.currentTimeMillis()
-                
-                // Create or update JSON configuration
-                val json = JSONObject().apply {
-                    put("packageName", packageName)
-                    put("displayName", displayName)
-                    put("createdAt", creationTime)
-                    put("lastUsed", creationTime)
-                    put("hasCustomIcon", customIcon != null)
-                    put("colorHex", colorHex ?: "")
-                    put("notificationsEnabled", true)
-                    put("isFrozen", false)
-                    put("version", 1)
-                }
-                
-                configFile.writeText(json.toString())
-                
-                // If custom icon provided, save it
-                if (customIcon != null && customIcon.exists()) {
-                    val iconFile = File(cloneDir, "custom_icon.png")
-                    customIcon.copyTo(iconFile, overwrite = true)
-                }
-                
-                // Create clone info object
-                val cloneInfo = CloneInfo(
-                    id = cloneId,
-                    packageName = packageName,
-                    displayName = displayName,
-                    originalIcon = originalIcon,
-                    creationTime = creationTime,
-                    lastUsedTime = creationTime,
-                    colorHex = colorHex,
-                    notificationsEnabled = true,
-                    isFrozen = false
-                )
-                
-                // Update clones list
-                val currentList = _clones.value.toMutableList()
-                currentList.add(cloneInfo)
-                currentList.sortByDescending { it.lastUsedTime }
-                _clones.value = currentList
-                
-                return@withContext cloneInfo
-            }
-            
-            null
-        } catch (e: Exception) {
-            Log.e(TAG, "Error creating clone", e)
-            null
+        // Serialize custom settings
+        val settingsJson = JSONObject()
+        for ((key, value) in clone.customSettings) {
+            settingsJson.put(key, value)
         }
+        json.put("customSettings", settingsJson)
+        
+        return json.toString()
     }
     
     /**
-     * Delete a clone
+     * Deserialize a JSON string to CloneInfo object
      */
-    suspend fun deleteClone(cloneId: String): Boolean = withContext(Dispatchers.IO) {
-        try {
-            // Delete clone files using VirtualAppEngine
-            val result = virtualAppEngine.deleteClone(cloneId)
-            
-            if (result) {
-                // Remove from in-memory list
-                val currentList = _clones.value.toMutableList()
-                val index = currentList.indexOfFirst { it.id == cloneId }
-                
-                if (index >= 0) {
-                    currentList.removeAt(index)
-                    _clones.value = currentList
-                }
-                
-                return@withContext true
-            }
-            
-            false
-        } catch (e: Exception) {
-            Log.e(TAG, "Error deleting clone", e)
-            false
+    private fun deserializeClone(serialized: String): CloneInfo {
+        val json = JSONObject(serialized)
+        
+        // Parse custom settings
+        val settingsJson = json.optJSONObject("customSettings") ?: JSONObject()
+        val settings = mutableMapOf<String, String>()
+        
+        settingsJson.keys().forEach { key ->
+            settings[key] = settingsJson.optString(key, "")
         }
-    }
-    
-    /**
-     * Get a specific clone by ID
-     */
-    suspend fun getCloneById(cloneId: String): CloneInfo? = withContext(Dispatchers.IO) {
-        _clones.value.firstOrNull { it.id == cloneId }
-    }
-    
-    /**
-     * Update the last used time for a clone
-     */
-    suspend fun updateLastUsedTime(cloneId: String, timestamp: Long) = withContext(Dispatchers.IO) {
-        try {
-            // Find the clone in memory
-            val currentList = _clones.value.toMutableList()
-            val index = currentList.indexOfFirst { it.id == cloneId }
-            
-            if (index >= 0) {
-                // Create updated clone info
-                val oldClone = currentList[index]
-                val updatedClone = oldClone.copy(lastUsedTime = timestamp)
-                
-                // Update in memory
-                currentList[index] = updatedClone
-                
-                // Sort by last used
-                currentList.sortByDescending { it.lastUsedTime }
-                _clones.value = currentList
-                
-                // Update config file
-                val configFile = File(clonesRootDir, "$cloneId/config.json")
-                if (configFile.exists()) {
-                    val json = JSONObject(configFile.readText())
-                    json.put("lastUsed", timestamp)
-                    configFile.writeText(json.toString())
-                }
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error updating last used time", e)
-        }
-    }
-    
-    /**
-     * Update the notification settings for a clone
-     */
-    suspend fun updateNotificationSettings(
-        cloneId: String, 
-        enabled: Boolean
-    ): Boolean = withContext(Dispatchers.IO) {
-        try {
-            // Find the clone in memory
-            val currentList = _clones.value.toMutableList()
-            val index = currentList.indexOfFirst { it.id == cloneId }
-            
-            if (index >= 0) {
-                // Create updated clone info
-                val oldClone = currentList[index]
-                val updatedClone = oldClone.copy(notificationsEnabled = enabled)
-                
-                // Update in memory
-                currentList[index] = updatedClone
-                _clones.value = currentList
-                
-                // Update config file
-                val configFile = File(clonesRootDir, "$cloneId/config.json")
-                if (configFile.exists()) {
-                    val json = JSONObject(configFile.readText())
-                    json.put("notificationsEnabled", enabled)
-                    configFile.writeText(json.toString())
-                    return@withContext true
-                }
-            }
-            
-            false
-        } catch (e: Exception) {
-            Log.e(TAG, "Error updating notification settings", e)
-            false
-        }
+        
+        return CloneInfo(
+            id = json.getString("id"),
+            packageName = json.getString("packageName"),
+            displayName = json.getString("displayName"),
+            iconPath = json.optString("iconPath", null).let { if (it.isEmpty()) null else it },
+            creationTime = json.getLong("creationTime"),
+            lastUsedTime = json.getLong("lastUsedTime"),
+            notificationsEnabled = json.getBoolean("notificationsEnabled"),
+            storageLocation = json.getString("storageLocation"),
+            customSettings = settings
+        )
     }
 }

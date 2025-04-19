@@ -1,132 +1,106 @@
 package com.multiclone.app.core.virtualization
 
-import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
-import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.os.Binder
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import com.multiclone.app.R
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
- * Background service that manages virtualization operations
+ * Background service for app virtualization operations
  */
 @AndroidEntryPoint
 class VirtualizationService : Service() {
     
     companion object {
         private const val TAG = "VirtualizationService"
-        private const val NOTIFICATION_ID = 1234
-        private const val CHANNEL_ID = "virtualization_service_channel"
+        private const val NOTIFICATION_ID = 1002
+        private const val CHANNEL_ID = "virtualization_channel"
     }
     
-    // Coroutine scope for service operations
-    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    // Binder to allow activity binding
+    private val binder = LocalBinder()
     
     @Inject
-    lateinit var virtualAppManager: VirtualAppManager
+    lateinit var cloneEnvironment: CloneEnvironment
+    
+    inner class LocalBinder : Binder() {
+        fun getService(): VirtualizationService = this@VirtualizationService
+    }
     
     override fun onCreate() {
         super.onCreate()
-        Log.d(TAG, "VirtualizationService created")
+        Log.d(TAG, "Service created")
         
-        // Start as a foreground service with a notification
-        startForeground()
+        // Create notification channel for foreground service
+        createNotificationChannel()
         
-        // Initialize virtualization
-        initializeVirtualization()
-    }
-    
-    /**
-     * Initialize virtualization components when the service starts
-     */
-    private fun initializeVirtualization() {
-        serviceScope.launch {
-            try {
-                Log.d(TAG, "Initializing virtualization components")
-                
-                // Add any initialization tasks here
-                
-                Log.d(TAG, "Virtualization components initialized successfully")
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to initialize virtualization components", e)
-            }
-        }
+        // Start as a foreground service to avoid being killed
+        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("Virtual Apps")
+            .setContentText("Running virtualization service")
+            .setSmallIcon(R.drawable.ic_notification)
+            .build()
+        
+        startForeground(NOTIFICATION_ID, notification)
     }
     
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        Log.d(TAG, "VirtualizationService started")
-        
-        // If this service is killed, restart it
+        Log.d(TAG, "Service started")
         return START_STICKY
     }
     
-    override fun onBind(intent: Intent?): IBinder? {
-        // Not providing binding, return null
-        return null
+    override fun onBind(intent: Intent?): IBinder {
+        return binder
     }
     
     override fun onDestroy() {
-        Log.d(TAG, "VirtualizationService destroyed")
         super.onDestroy()
+        Log.d(TAG, "Service destroyed")
     }
     
     /**
-     * Start as a foreground service with a notification
+     * Create a virtual environment for a given package
      */
-    private fun startForeground() {
-        // Create notification channel for Android O and above
+    fun createVirtualEnvironment(packageName: String, cloneId: String): String {
+        return cloneEnvironment.createEnvironment(cloneId, packageName)
+    }
+    
+    /**
+     * Prepare to run a virtual app
+     */
+    fun prepareVirtualApp(packageName: String, cloneId: String, targetActivity: String? = null) {
+        Log.d(TAG, "Preparing virtual app: $packageName, clone: $cloneId, activity: $targetActivity")
+        // This would set up the virtual environment, hooks, and patching
+    }
+    
+    /**
+     * Clean up after a virtual app exits
+     */
+    fun cleanupVirtualApp(packageName: String, cloneId: String) {
+        Log.d(TAG, "Cleaning up virtual app: $packageName, clone: $cloneId")
+        // This would clean up any resources or processes
+    }
+    
+    private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                "Virtualization Service",
-                NotificationManager.IMPORTANCE_LOW
-            ).apply {
-                description = "Channel for the virtualization service"
-                setShowBadge(false)
+            val name = "Virtualization"
+            val description = "Handles app virtualization"
+            val importance = NotificationManager.IMPORTANCE_LOW
+            val channel = NotificationChannel(CHANNEL_ID, name, importance).apply {
+                this.description = description
             }
             
             val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             notificationManager.createNotificationChannel(channel)
         }
-        
-        // Create a main activity intent
-        val mainActivityIntent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
-            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
-        }
-        
-        val pendingIntent = PendingIntent.getActivity(
-            this,
-            0,
-            mainActivityIntent,
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-            } else {
-                PendingIntent.FLAG_UPDATE_CURRENT
-            }
-        )
-        
-        // Build the notification
-        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_menu_more) // Placeholder icon
-            .setContentTitle("MultiClone is running")
-            .setContentText("Managing your virtual apps")
-            .setContentIntent(pendingIntent)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setVisibility(NotificationCompat.VISIBILITY_SECRET)
-            .build()
-        
-        // Start as foreground service
-        startForeground(NOTIFICATION_ID, notification)
     }
 }

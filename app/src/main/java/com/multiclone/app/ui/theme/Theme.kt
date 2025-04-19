@@ -27,6 +27,9 @@ private val LightColorScheme = lightColorScheme(
     tertiary = Pink40
 )
 
+/**
+ * Theme for the MultiClone app
+ */
 @Composable
 fun MultiCloneAppTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),

@@ -1,25 +1,40 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">MultiClone</string>
-    <string name="select_app_to_clone">Select App to Clone</string>
-    <string name="configure_clone">Configure Clone</string>
-    <string name="your_clones">Your Clones</string>
+    <string name="app_name">MultiClone App</string>
+    
+    <!-- Main Screen Strings -->
+    <string name="home_screen_title">MultiClone App</string>
+    <string name="empty_clones_message">No cloned apps yet</string>
+    <string name="empty_clones_description">Tap the + button to clone your first app</string>
+    <string name="clone_new_app">Clone New App</string>
+    
+    <!-- App Selection Screen -->
+    <string name="app_selection_title">Select App to Clone</string>
+    <string name="search_apps">Search Apps</string>
+    <string name="no_apps_found">No apps found</string>
+    <string name="no_search_results">No apps match \'%1$s\'</string>
+    
+    <!-- Clone Configuration -->
+    <string name="configure_clone_title">Configure Clone</string>
+    <string name="clone_name">Clone Name</string>
     <string name="create_clone">Create Clone</string>
-    <string name="clone_created">Clone Created Successfully</string>
-    <string name="clone_failed">Failed to Create Clone</string>
-    <string name="clone_name_hint">Clone Name</string>
-    <string name="create_shortcut">Create Shortcut</string>
-    <string name="shortcut_created">Shortcut Created</string>
-    <string name="shortcut_failed">Failed to Create Shortcut</string>
-    <string name="no_apps_found">No applications found</string>
-    <string name="no_clones">You don\'t have any clones yet</string>
-    <string name="search_apps">Search applications…</string>
-    <string name="permissions_required">Required Permissions</string>
-    <string name="grant_permissions">Grant Permissions</string>
-    <string name="permissions_denied">Permissions were denied. Some features may not work properly.</string>
-    <string name="installation_in_progress">Installation in progress…</string>
-    <string name="installation_failed">Installation failed</string>
-    <string name="delete_clone">Delete Clone</string>
-    <string name="clone_deleted">Clone deleted successfully</string>
-    <string name="launch_app">Launch App</string>
+    <string name="creating_clone">Creating clone…</string>
+    
+    <!-- Clone Details -->
+    <string name="clone_details_title">Clone Details</string>
+    <string name="notifications">Notifications</string>
+    <string name="enabled">Enabled</string>
+    <string name="disabled">Disabled</string>
+    <string name="created">Created</string>
+    <string name="last_used">Last Used</string>
+    <string name="launch_clone">Launch Clone</string>
+    <string name="clone_not_found">Clone not found</string>
+    
+    <!-- Dialogs -->
+    <string name="dialog_clone_name_title">Clone Name</string>
+    <string name="dialog_delete_title">Delete Clone</string>
+    <string name="dialog_delete_message">Are you sure you want to delete this clone? This action cannot be undone.</string>
+    <string name="dialog_delete_confirm">Delete</string>
+    <string name="dialog_cancel">Cancel</string>
+    <string name="dialog_ok">OK</string>
 </resources>

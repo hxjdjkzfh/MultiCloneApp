@@ -1,50 +1,22 @@
 package com.multiclone.app.ui.screens
 
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.wrapContentSize
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Create
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.multiclone.app.data.model.CloneInfo
-import com.multiclone.app.ui.components.LoadingOverlay
-import com.multiclone.app.utils.IconUtils
-import com.multiclone.app.viewmodel.CloneConfigViewModel
+import com.multiclone.app.data.model.AppInfo
+import com.multiclone.app.ui.viewmodels.AppSelectionViewModel
 
 /**
  * Screen for configuring a new clone
@@ -52,22 +24,54 @@ import com.multiclone.app.viewmodel.CloneConfigViewModel
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CloneConfigScreen(
-    onBackPressed: () -> Unit,
-    onCloneCreated: (CloneInfo) -> Unit,
-    viewModel: CloneConfigViewModel = hiltViewModel()
+    appInfo: AppInfo,
+    onNavigateBack: () -> Unit,
+    onCloneCreated: () -> Unit,
+    viewModel: AppSelectionViewModel = hiltViewModel()
 ) {
-    val selectedApp by viewModel.selectedApp.collectAsState()
-    val displayName by viewModel.displayName.collectAsState()
-    val customIcon by viewModel.customIcon.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
-    val cloneCreated by viewModel.cloneCreated.collectAsState()
+    val error by viewModel.error.collectAsState()
+    val lastCreatedClone by viewModel.lastCreatedClone.collectAsState()
     
-    // Handle navigation when clone is created
-    LaunchedEffect(cloneCreated) {
-        cloneCreated?.let {
-            onCloneCreated(it)
-            viewModel.resetCloneCreated()
+    // State for clone name
+    var showNameDialog by remember { mutableStateOf(true) }
+    var cloneName by remember { mutableStateOf(appInfo.appName) }
+    
+    // Handle successful clone creation
+    LaunchedEffect(lastCreatedClone) {
+        lastCreatedClone?.let {
+            // Clone was created successfully
+            viewModel.clearLastCreatedClone()
+            onCloneCreated()
         }
+    }
+    
+    // Handle error
+    LaunchedEffect(error) {
+        error?.let {
+            // In a real app, you would show a snackbar or dialog
+            // For now, just reset the error after showing it
+            viewModel.clearError()
+        }
+    }
+    
+    // Show dialog to enter clone name if needed
+    if (showNameDialog) {
+        CloneNameDialog(
+            initialName = cloneName,
+            onConfirm = { name ->
+                cloneName = name
+                showNameDialog = false
+            },
+            onDismiss = {
+                // If user dismisses without entering a name, go back
+                if (cloneName.isBlank()) {
+                    onNavigateBack()
+                } else {
+                    showNameDialog = false
+                }
+            }
+        )
     }
     
     Scaffold(
@@ -75,7 +79,7 @@ fun CloneConfigScreen(
             TopAppBar(
                 title = { Text("Configure Clone") },
                 navigationIcon = {
-                    IconButton(onClick = onBackPressed) {
+                    IconButton(onClick = onNavigateBack) {
                         Icon(
                             imageVector = Icons.Default.ArrowBack,
                             contentDescription = "Back"
@@ -84,98 +88,182 @@ fun CloneConfigScreen(
                 }
             )
         },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = { viewModel.createClone() },
-                content = {
-                    Icon(
-                        imageVector = Icons.Default.Check,
-                        contentDescription = "Create Clone"
-                    )
+        // Create clone button at the bottom
+        bottomBar = {
+            BottomAppBar {
+                Spacer(modifier = Modifier.weight(1f))
+                
+                Button(
+                    onClick = {
+                        // Create the clone with current settings
+                        viewModel.createClone(appInfo.packageName, cloneName)
+                    },
+                    enabled = !isLoading && cloneName.isNotBlank(),
+                    modifier = Modifier.padding(16.dp)
+                ) {
+                    Text("Create Clone")
                 }
-            )
+            }
         }
     ) { paddingValues ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-        ) {
-            selectedApp?.let { app ->
+        if (isLoading) {
+            // Show loading indicator
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues),
+                contentAlignment = Alignment.Center
+            ) {
                 Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // App icon
-                    val iconBitmap = customIcon ?: IconUtils.drawableToBitmap(app.icon)
-                    Image(
-                        bitmap = iconBitmap.asImageBitmap(),
-                        contentDescription = "App Icon",
-                        modifier = Modifier
-                            .size(120.dp)
-                            .clip(CircleShape)
-                            .border(2.dp, MaterialTheme.colorScheme.primary, CircleShape)
-                            .padding(8.dp)
-                            .clickable {
-                                // In a real app, this would open an icon picker
-                            }
-                    )
-                    
-                    Spacer(modifier = Modifier.height(24.dp))
-                    
-                    // Original app name
-                    Text(
-                        text = "Original App: ${app.appName}",
-                        style = MaterialTheme.typography.bodyLarge
-                    )
-                    
-                    Spacer(modifier = Modifier.height(8.dp))
-                    
-                    // Display name field
-                    OutlinedTextField(
-                        value = displayName,
-                        onValueChange = { viewModel.updateDisplayName(it) },
-                        label = { Text("Display Name") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    CircularProgressIndicator()
                     
                     Spacer(modifier = Modifier.height(16.dp))
                     
                     Text(
-                        text = "The clone will be created with a separate data storage and can be used independently from the original app.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        textAlign = TextAlign.Center
-                    )
-                    
-                    Spacer(modifier = Modifier.height(24.dp))
-                    
-                    Button(
-                        onClick = { viewModel.createClone() },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Create Clone")
-                    }
-                }
-            } ?: run {
-                // App not found view
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "App not found",
-                        style = MaterialTheme.typography.headlineMedium
+                        text = "Creating clone...",
+                        style = MaterialTheme.typography.bodyLarge
                     )
                 }
             }
-            
-            // Loading overlay
-            LoadingOverlay(
-                isVisible = isLoading,
-                message = "Creating clone..."
-            )
+        } else {
+            // Show configuration options
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // App info card
+                Card(
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        // App icon (placeholder)
+                        Icon(
+                            imageVector = Icons.Default.Create,
+                            contentDescription = null,
+                            modifier = Modifier
+                                .size(64.dp)
+                                .padding(bottom = 8.dp)
+                        )
+                        
+                        // App name
+                        Text(
+                            text = appInfo.appName,
+                            style = MaterialTheme.typography.headlineSmall,
+                            textAlign = TextAlign.Center
+                        )
+                        
+                        // Package name
+                        Text(
+                            text = appInfo.packageName,
+                            style = MaterialTheme.typography.bodySmall,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+                
+                // Clone name card
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = { showNameDialog = true }
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Clone Name",
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            
+                            Text(
+                                text = cloneName,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                        
+                        IconButton(onClick = { showNameDialog = true }) {
+                            Icon(
+                                imageVector = Icons.Default.Create,
+                                contentDescription = "Edit name"
+                            )
+                        }
+                    }
+                }
+                
+                // Additional options can be added here
+                // (Custom icon, notification settings, etc.)
+            }
+        }
+    }
+}
+
+/**
+ * Dialog for entering the clone name
+ */
+@Composable
+fun CloneNameDialog(
+    initialName: String,
+    onConfirm: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var name by remember { mutableStateOf(initialName) }
+    
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = MaterialTheme.shapes.medium,
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 8.dp
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Title
+                Text(
+                    text = "Clone Name",
+                    style = MaterialTheme.typography.headlineSmall
+                )
+                
+                // Text field
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Name") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                
+                // Buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text("Cancel")
+                    }
+                    
+                    Spacer(modifier = Modifier.width(8.dp))
+                    
+                    Button(
+                        onClick = { onConfirm(name) },
+                        enabled = name.isNotBlank()
+                    ) {
+                        Text("OK")
+                    }
+                }
+            }
         }
     }
 }
