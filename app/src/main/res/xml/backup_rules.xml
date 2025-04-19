@@ -1,8 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <full-backup-content>
-    <exclude domain="root" path="."/>
-    <exclude domain="file" path="clone_environments/"/>
-    <exclude domain="file" path="virtualization/"/>
-    <include domain="file" path="preferences/" />
-    <include domain="file" path="databases/" />
+    <!-- Exclude virtual app data from backups -->
+    <exclude domain="file" path="virtual/"/>
 </full-backup-content>

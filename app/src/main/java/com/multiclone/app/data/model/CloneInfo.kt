@@ -1,83 +1,84 @@
 package com.multiclone.app.data.model
 
+import android.graphics.drawable.Drawable
 import android.os.Parcelable
 import kotlinx.parcelize.Parcelize
 import java.util.UUID
 
 /**
- * Represents information about a cloned application instance
+ * Data class representing information about a cloned app
  */
 @Parcelize
 data class CloneInfo(
-    // Unique identifier for this clone
     val id: String = UUID.randomUUID().toString(),
-    
-    // Original app package name
     val originalPackageName: String,
-    
-    // Custom name given to this clone
-    val customName: String,
-    
-    // Timestamp when this clone was created
-    val createdAt: Long = System.currentTimeMillis(),
-    
-    // Timestamp when this clone was last launched
-    val lastLaunchTime: Long = 0,
-    
-    // Number of times this clone has been launched
+    val cloneName: String,
+    val customIcon: Boolean = false,
+    val iconPath: String? = null,
+    val creationTime: Long = System.currentTimeMillis(),
+    val lastLaunchTime: Long = 0L,
     val launchCount: Int = 0,
-    
-    // Custom icon resource ID or path (if any)
-    val customIconPath: String? = null,
-    
-    // Custom color for this clone
-    val customColor: Int? = null,
-    
-    // Storage isolation level (0=shared, 1=isolated, 2=fully isolated)
-    val storageIsolationLevel: Int = 1,
-    
-    // Should the clone show custom notifications
-    val useCustomNotifications: Boolean = true,
-    
-    // Should the clone be shown in launcher
-    val showInLauncher: Boolean = true,
-    
-    // Environment version - used for upgrading clone environments
-    val environmentVersion: Int = 1,
-    
-    // Is this clone running
-    val isRunning: Boolean = false
+    val isRunning: Boolean = false,
+    val customSettings: Map<String, String> = emptyMap(),
+    // Non-parcelable fields that don't need to be passed between components
+    @Transient var icon: Drawable? = null
 ) : Parcelable {
     
     /**
-     * Get the internal package name used for this clone
+     * Generate a unique package name for the clone
      */
-    fun getInternalPackageName(): String {
-        return "com.multiclone.app.virtual.$originalPackageName.$id"
+    fun getClonePackageName(): String {
+        return "$originalPackageName.clone_$id"
     }
     
     /**
-     * Get the display name for this clone
+     * Get the custom settings as a JSON string
      */
-    fun getDisplayName(): String {
-        return customName.ifEmpty { originalPackageName.split(".").last() }
-    }
-    
-    /**
-     * Check if the clone environment needs an update
-     */
-    fun needsEnvironmentUpdate(currentVersion: Int): Boolean {
-        return environmentVersion < currentVersion
-    }
-    
-    override fun equals(other: Any?): Boolean {
-        if (this === other) return true
-        if (other !is CloneInfo) return false
+    fun getSettingsJson(): String {
+        val settingsJson = StringBuilder()
+        settingsJson.append("{")
         
-        return id == other.id
+        customSettings.entries.forEachIndexed { index, entry ->
+            settingsJson.append("\"${entry.key}\": \"${entry.value}\"")
+            if (index < customSettings.size - 1) {
+                settingsJson.append(",")
+            }
+        }
+        
+        settingsJson.append("}")
+        return settingsJson.toString()
     }
     
-    override fun hashCode(): Int {
-        return id.hashCode()
+    /**
+     * Create a copy of this CloneInfo with updated launch statistics
+     */
+    fun withUpdatedLaunchStats(): CloneInfo {
+        return copy(
+            lastLaunchTime = System.currentTimeMillis(),
+            launchCount = launchCount + 1,
+            isRunning = true
+        )
+    }
+    
+    /**
+     * Create a copy of this CloneInfo with updated running status
+     */
+    fun withUpdatedRunningStatus(running: Boolean): CloneInfo {
+        return copy(isRunning = running)
+    }
+    
+    companion object {
+        /**
+         * Create a new CloneInfo from an AppInfo
+         */
+        fun fromAppInfo(appInfo: AppInfo, cloneName: String? = null): CloneInfo {
+            return CloneInfo(
+                originalPackageName = appInfo.packageName,
+                cloneName = cloneName ?: "${appInfo.appName} (Clone)",
+                customIcon = false,
+                iconPath = null,
+                icon = appInfo.icon
+            )
+        }
     }
 }

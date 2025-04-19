@@ -1,141 +1,88 @@
 package com.multiclone.app.core.virtualization
 
+import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.lifecycle.lifecycleScope
-import com.multiclone.app.R
-import com.multiclone.app.data.repository.CloneRepository
-import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
 
 /**
- * Activity for proxying cloned app launches.
- * This is the entry point from launcher shortcuts and URI scheme handlers.
+ * Proxy activity for launching cloned apps
+ * This activity acts as a trampoline to launch the cloned app with virtualized context
  */
-@AndroidEntryPoint
 class CloneProxyActivity : ComponentActivity() {
-
-    @Inject
-    lateinit var cloneRepository: CloneRepository
     
     @Inject
-    lateinit var virtualAppEngine: VirtualAppEngine
+    lateinit var cloneManagerService: CloneManagerService
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        // Get the clone ID from the intent
-        val cloneId = intent.getStringExtra("clone_id")
+        // Extract clone ID from intent
+        val cloneId = intent.getStringExtra(EXTRA_CLONE_ID)
         
-        if (cloneId.isNullOrEmpty()) {
-            // No clone ID provided, handle URI scheme
-            handleUriScheme()
-        } else {
-            // Launch the cloned app
-            launchClonedApp(cloneId)
+        if (cloneId == null) {
+            Timber.e("No clone ID provided")
+            finish()
+            return
         }
+        
+        Timber.d("Launching clone: $cloneId")
+        
+        // Launch the cloned app
+        launchClonedApp(cloneId)
     }
     
     /**
-     * Launch a cloned app
+     * Launch the cloned app through the virtualization service
      */
     private fun launchClonedApp(cloneId: String) {
-        lifecycleScope.launch {
-            try {
-                Timber.d("Launching clone $cloneId")
-                
-                // Get the clone info
-                val cloneInfo = cloneRepository.getCloneById(cloneId)
-                
-                if (cloneInfo == null) {
-                    Timber.e("Clone not found: $cloneId")
-                    showError(getString(R.string.error_app_not_found))
-                    return@launch
-                }
-                
-                // Update launch statistics
-                cloneRepository.updateLaunchStats(cloneId)
-                
-                // Launch the app through the virtualization engine
-                val launched = virtualAppEngine.launchApp(cloneInfo)
-                
-                if (!launched) {
-                    Timber.e("Failed to launch clone $cloneId")
-                    showError(getString(R.string.error_virtualization))
-                }
-                
-                // Finish this activity
-                finish()
-            } catch (e: Exception) {
-                Timber.e(e, "Error launching clone")
-                showError(e.message ?: getString(R.string.error_virtualization))
+        try {
+            // In a real implementation, the virtualization service would need to:
+            // 1. Set up a virtual environment for the app
+            // 2. Redirect system calls and services
+            // 3. Launch the real app with virtualized context
+            
+            val launchIntent = cloneManagerService.getLaunchIntent(cloneId)
+            
+            if (launchIntent != null) {
+                startActivity(launchIntent)
+            } else {
+                Timber.e("Failed to get launch intent for clone: $cloneId")
+                showError("Failed to launch cloned app")
             }
+        } catch (e: Exception) {
+            Timber.e(e, "Error launching cloned app")
+            showError("Failed to launch cloned app")
+        } finally {
+            // Finish the proxy activity
+            finish()
         }
     }
     
     /**
-     * Handle deep links via the multiclone:// URI scheme
-     */
-    private fun handleUriScheme() {
-        val uri = intent.data
-        if (uri != null && uri.scheme == "multiclone") {
-            try {
-                when (uri.host) {
-                    "launch" -> {
-                        // Format: multiclone://launch/CLONE_ID
-                        val cloneId = uri.pathSegments.firstOrNull()
-                        if (cloneId != null) {
-                            launchClonedApp(cloneId)
-                        } else {
-                            showError(getString(R.string.error_invalid_operation))
-                        }
-                    }
-                    "create" -> {
-                        // Format: multiclone://create/PACKAGE_NAME
-                        val packageName = uri.pathSegments.firstOrNull()
-                        if (packageName != null) {
-                            // Redirect to the main app with the package name
-                            val mainIntent = Intent(this, Class.forName("com.multiclone.app.MainActivity")).apply {
-                                action = "com.multiclone.app.action.CREATE_CLONE"
-                                putExtra("package_name", packageName)
-                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            }
-                            startActivity(mainIntent)
-                            finish()
-                        } else {
-                            showError(getString(R.string.error_invalid_operation))
-                        }
-                    }
-                    else -> {
-                        showError(getString(R.string.error_invalid_operation))
-                    }
-                }
-            } catch (e: Exception) {
-                Timber.e(e, "Error handling URI scheme")
-                showError(e.message ?: getString(R.string.error_invalid_operation))
-            }
-        } else {
-            showError(getString(R.string.error_invalid_operation))
-        }
-    }
-    
-    /**
-     * Show an error message
+     * Show an error message to the user
      */
     private fun showError(message: String) {
-        // In a real implementation, we would show a dialog or toast
-        Timber.e("Error: $message")
+        // In a real app, we would show a toast or dialog
+        Timber.e(message)
+    }
+    
+    companion object {
+        private const val EXTRA_CLONE_ID = "extra_clone_id"
         
-        // For now, just redirect to the main app with the error
-        val mainIntent = Intent(this, Class.forName("com.multiclone.app.MainActivity")).apply {
-            action = "com.multiclone.app.action.SHOW_ERROR"
-            putExtra("error_message", message)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        /**
+         * Create an intent to launch a cloned app via the proxy
+         */
+        fun createIntent(context: Context, cloneId: String): Intent {
+            return Intent(context, CloneProxyActivity::class.java).apply {
+                putExtra(EXTRA_CLONE_ID, cloneId)
+                // Flags to properly handle the task stack
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            }
         }
-        startActivity(mainIntent)
-        finish()
     }
 }

@@ -1,97 +1,80 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- App -->
     <string name="app_name">MultiClone</string>
     
-    <!-- Main Navigation -->
+    <!-- Navigation -->
     <string name="nav_home">Home</string>
-    <string name="nav_apps">Apps</string>
     <string name="nav_settings">Settings</string>
     <string name="nav_about">About</string>
     
     <!-- Home Screen -->
-    <string name="home_title">Your App Clones</string>
-    <string name="home_empty_state">No cloned apps yet</string>
-    <string name="home_create_first_clone">Create your first clone</string>
-    <string name="home_search_hint">Search clones…</string>
-    <string name="home_filter">Filter</string>
-    <string name="home_sort">Sort</string>
+    <string name="home_title">MultiClone</string>
+    <string name="home_empty_state">You don\'t have any cloned apps yet</string>
+    <string name="home_create_first_clone">Create Clone</string>
     
     <!-- App Selection Screen -->
-    <string name="app_selection_title">Select an app to clone</string>
-    <string name="app_selection_search_hint">Search installed apps…</string>
-    <string name="app_selection_recent">Recently used</string>
-    <string name="app_selection_all">All apps</string>
-    <string name="app_selection_system">System apps</string>
-    <string name="app_selection_user">User apps</string>
+    <string name="app_selection_title">Select App</string>
+    <string name="app_selection_search_hint">Search applications</string>
+    <string name="app_selection_empty_state">No applications found</string>
+    <string name="app_selection_filter_title">Filter Apps</string>
+    <string name="app_selection_filter_all">All Apps</string>
+    <string name="app_selection_filter_user">User Apps</string>
+    <string name="app_selection_filter_system">System Apps</string>
+    <string name="app_selection_filter_apply">Apply</string>
+    <string name="app_selection_filter_reset">Reset</string>
     
-    <!-- Clone Configuration Screen -->
-    <string name="clone_config_title">Configure App Clone</string>
-    <string name="clone_config_name">Clone name</string>
-    <string name="clone_config_name_hint">Enter a name for this clone</string>
-    <string name="clone_config_icon">Clone icon</string>
-    <string name="clone_config_icon_select">Choose icon</string>
-    <string name="clone_config_color">Accent color</string>
-    <string name="clone_config_create">Create Clone</string>
-    <string name="clone_config_advanced">Advanced Settings</string>
-    <string name="clone_config_storage">Storage isolation</string>
-    <string name="clone_config_notifications">Custom notifications</string>
-    <string name="clone_config_launcher">Add to launcher</string>
+    <!-- Clone Config Screen -->
+    <string name="clone_config_new_title">New Clone</string>
+    <string name="clone_config_edit_title">Edit Clone</string>
+    <string name="clone_config_app_info_title">App Info</string>
+    <string name="clone_config_basic_settings_title">Basic Settings</string>
+    <string name="clone_config_name_label">Clone Name</string>
+    <string name="clone_config_color_label">Clone Color</string>
+    <string name="clone_config_advanced_title">Advanced Settings</string>
+    <string name="clone_config_custom_isolation">Custom Isolation</string>
+    <string name="clone_config_custom_isolation_desc">Configure specific isolation settings</string>
+    <string name="clone_config_isolate_storage">Isolate Storage</string>
+    <string name="clone_config_isolate_accounts">Isolate Accounts</string>
+    <string name="clone_config_isolate_location">Isolate Location</string>
+    <string name="clone_config_custom_launcher">Custom Launcher Icon</string>
+    <string name="clone_config_custom_launcher_desc">Create a separate icon in the launcher</string>
+    <string name="clone_config_save">Save Clone</string>
+    <string name="clone_config_app_not_found">App not found</string>
     
-    <!-- Clone Management -->
-    <string name="clone_open">Open</string>
-    <string name="clone_edit">Edit</string>
-    <string name="clone_delete">Delete</string>
-    <string name="clone_share">Share</string>
-    <string name="clone_shortcut">Add shortcut</string>
-    <string name="clone_data_usage">Data usage</string>
-    
-    <!-- Notifications -->
-    <string name="notification_channel_default">Default</string>
-    <string name="notification_channel_service">Background Service</string>
-    <string name="notification_running">MultiClone is running</string>
-    <string name="notification_clones_active">Managing %d active clones</string>
-    
-    <!-- Dialogs -->
-    <string name="dialog_delete_title">Delete clone</string>
-    <string name="dialog_delete_message">Are you sure you want to delete this clone? All its data will be permanently lost.</string>
-    <string name="dialog_delete_confirm">Delete</string>
-    <string name="dialog_delete_cancel">Cancel</string>
-    
-    <!-- Settings -->
+    <!-- Settings Screen -->
     <string name="settings_title">Settings</string>
-    <string name="settings_theme">Theme</string>
-    <string name="settings_theme_system">System default</string>
-    <string name="settings_theme_light">Light</string>
-    <string name="settings_theme_dark">Dark</string>
+    <string name="settings_general_section">General</string>
     <string name="settings_notifications">Notifications</string>
-    <string name="settings_autostart">Start on boot</string>
-    <string name="settings_storage">Storage location</string>
-    <string name="settings_clear_cache">Clear cache</string>
-    <string name="settings_about">About</string>
-    <string name="settings_version">Version</string>
+    <string name="settings_notifications_desc">Get notified about cloned app activities</string>
+    <string name="settings_auto_start">Auto-start at boot</string>
+    <string name="settings_auto_start_desc">Start cloned apps when device boots</string>
+    <string name="settings_auto_cleanup">Auto-cleanup</string>
+    <string name="settings_auto_cleanup_desc">Clean unused clones data automatically</string>
+    <string name="settings_appearance_section">Appearance</string>
+    <string name="settings_dark_mode">Dark Mode</string>
+    <string name="settings_dark_mode_desc">Enable dark theme</string>
+    <string name="settings_compact_mode">Compact Mode</string>
+    <string name="settings_compact_mode_desc">Show more items in lists</string>
+    <string name="settings_advanced_section">Advanced</string>
+    <string name="settings_developer_mode">Developer Mode</string>
+    <string name="settings_developer_mode_desc">Enable advanced diagnostics and debugging features</string>
+    <string name="settings_debug_logging">Debug Logging</string>
+    <string name="settings_debug_logging_desc">Generate detailed logs for troubleshooting</string>
+    <string name="settings_version">Version %1$s</string>
     
-    <!-- Statuses and Messages -->
-    <string name="status_creating">Creating clone…</string>
-    <string name="status_updating">Updating clone…</string>
-    <string name="status_deleting">Deleting clone…</string>
-    <string name="status_error">Error</string>
-    <string name="status_success">Success</string>
-    
-    <!-- Error Messages -->
-    <string name="error_clone_failed">Failed to create clone</string>
-    <string name="error_clone_update">Failed to update clone</string>
-    <string name="error_clone_delete">Failed to delete clone</string>
-    <string name="error_permission_denied">Permission denied</string>
-    <string name="error_storage_access">Storage access denied</string>
-    <string name="error_app_not_found">Application not found</string>
-    <string name="error_invalid_operation">Invalid operation</string>
-    <string name="error_virtualization">Virtualization error</string>
-    
-    <!-- Permissions -->
-    <string name="permission_storage_title">Storage permission</string>
-    <string name="permission_storage_message">MultiClone needs storage permission to create isolated environments for your cloned apps.</string>
-    <string name="permission_request">Grant permission</string>
-    <string name="permission_denied_message">This permission is required for app cloning. Please grant it in settings.</string>
-    <string name="permission_open_settings">Open Settings</string>
+    <!-- About Screen -->
+    <string name="about_title">About MultiClone</string>
+    <string name="about_version">Version %1$s</string>
+    <string name="about_description_title">About</string>
+    <string name="about_description">MultiClone allows you to create and run multiple instances of the same app on your device without root access.</string>
+    <string name="about_features_title">Features</string>
+    <string name="about_feature_1">Run multiple instances of the same app</string>
+    <string name="about_feature_2">Isolate data between app clones</string>
+    <string name="about_feature_3">Customize clone names and appearance</string>
+    <string name="about_feature_4">No root access required</string>
+    <string name="about_feature_5">Battery-efficient virtualization</string>
+    <string name="about_developer_title">Developer</string>
+    <string name="about_developer_name">The MultiClone Team</string>
+    <string name="about_developer_contact">contact@multiclone.app</string>
+    <string name="about_copyright">© %1$s MultiClone. All rights reserved.</string>
 </resources>

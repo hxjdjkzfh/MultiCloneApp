@@ -1,182 +1,207 @@
 package com.multiclone.app.core.virtualization
 
-import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.PendingIntent
 import android.app.Service
-import android.content.Context
 import android.content.Intent
-import android.os.Build
+import android.os.Binder
 import android.os.IBinder
-import androidx.core.app.NotificationCompat
-import com.multiclone.app.R
+import com.multiclone.app.data.model.CloneInfo
 import com.multiclone.app.data.repository.CloneRepository
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
 
 /**
- * Background service for managing virtualized app environments
+ * Background service that handles app virtualization
  */
 @AndroidEntryPoint
 class VirtualizationService : Service() {
-
-    companion object {
-        private const val NOTIFICATION_ID = 1001
-        private const val CHANNEL_ID = "virtualization_service_channel"
-    }
-
+    
     @Inject
     lateinit var cloneRepository: CloneRepository
     
     @Inject
-    lateinit var virtualAppEngine: VirtualAppEngine
+    lateinit var cloneEnvironment: CloneEnvironment
     
-    // Coroutine scope for background operations
-    private val serviceScope = CoroutineScope(Dispatchers.Default)
-    private var monitorJob: Job? = null
+    @Inject
+    lateinit var clonedAppInstaller: ClonedAppInstaller
+    
+    // Map of running clone IDs to their virtualization contexts
+    private val runningClones = mutableMapOf<String, VirtualContext>()
+    
+    // Service coroutine scope
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    
+    // Binder for local service connection
+    private val binder = LocalBinder()
     
     override fun onCreate() {
         super.onCreate()
-        Timber.d("VirtualizationService - onCreate")
-        
-        // Create notification channel for foreground service
-        createNotificationChannel()
-        
-        // Start the service in foreground to ensure it stays alive
-        startForeground(NOTIFICATION_ID, createNotification(0))
-        
-        // Start monitoring clones
-        startMonitoring()
+        Timber.d("VirtualizationService created")
     }
     
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        Timber.d("VirtualizationService - onStartCommand")
-        
-        // If the service was killed, restart it
+        Timber.d("VirtualizationService started")
         return START_STICKY
     }
     
+    override fun onBind(intent: Intent?): IBinder {
+        Timber.d("VirtualizationService bound")
+        return binder
+    }
+    
     override fun onDestroy() {
-        Timber.d("VirtualizationService - onDestroy")
+        Timber.d("VirtualizationService destroyed")
         
-        // Cancel the monitoring job
-        monitorJob?.cancel()
+        // Stop all running clones
+        stopAllClones()
+        
+        // Cancel the service scope
+        serviceScope.cancel()
         
         super.onDestroy()
     }
     
-    override fun onBind(intent: Intent?): IBinder? {
-        // This service doesn't support binding
-        return null
-    }
-    
     /**
-     * Create the notification channel for Android 8.0+
+     * Start a cloned app
      */
-    private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channelName = getString(R.string.notification_channel_service)
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                channelName,
-                NotificationManager.IMPORTANCE_LOW
-            ).apply {
-                description = channelName
-                enableLights(false)
-                enableVibration(false)
-            }
-            
-            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            notificationManager.createNotificationChannel(channel)
-        }
-    }
-    
-    /**
-     * Create the foreground service notification
-     */
-    private fun createNotification(activeClones: Int): Notification {
-        // Intent to open the main activity when notification is tapped
-        val pendingIntent = PendingIntent.getActivity(
-            this,
-            0,
-            packageManager.getLaunchIntentForPackage(packageName),
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-            } else {
-                PendingIntent.FLAG_UPDATE_CURRENT
-            }
-        )
+    fun startClone(cloneId: String): Boolean {
+        Timber.d("Starting clone: $cloneId")
         
-        // Create the notification
-        return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle(getString(R.string.notification_running))
-            .setContentText(getString(R.string.notification_clones_active, activeClones))
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
-            .setContentIntent(pendingIntent)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setOngoing(true)
-            .build()
+        if (runningClones.containsKey(cloneId)) {
+            Timber.d("Clone already running: $cloneId")
+            return true
+        }
+        
+        serviceScope.launch {
+            try {
+                // Get the clone info
+                val cloneInfo = cloneRepository.getCloneById(cloneId)
+                
+                if (cloneInfo == null) {
+                    Timber.e("Clone not found: $cloneId")
+                    return@launch
+                }
+                
+                // Set up the virtual environment
+                if (!setupVirtualEnvironment(cloneInfo)) {
+                    Timber.e("Failed to set up virtual environment for clone: $cloneId")
+                    return@launch
+                }
+                
+                // Create a virtual context for the clone
+                val virtualContext = VirtualContext(cloneInfo)
+                
+                // Add to running clones
+                runningClones[cloneId] = virtualContext
+                
+                // Update the clone running status in the repository
+                cloneRepository.updateCloneRunningStatus(cloneId, true)
+                
+                Timber.d("Clone started: $cloneId")
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to start clone: $cloneId")
+            }
+        }
+        
+        return true
     }
     
     /**
-     * Start monitoring cloned apps
+     * Stop a cloned app
      */
-    private fun startMonitoring() {
-        monitorJob = serviceScope.launch {
-            Timber.d("Starting clone monitoring")
-            
+    fun stopClone(cloneId: String): Boolean {
+        Timber.d("Stopping clone: $cloneId")
+        
+        val virtualContext = runningClones[cloneId]
+        if (virtualContext == null) {
+            Timber.d("Clone not running: $cloneId")
+            return true
+        }
+        
+        serviceScope.launch {
             try {
-                // Monitor clones and update the notification
-                cloneRepository.getClones().collect { clones ->
-                    val activeCount = clones.count { it.isRunning }
-                    
-                    // Update the notification
-                    val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-                    notificationManager.notify(NOTIFICATION_ID, createNotification(activeCount))
-                    
-                    // Perform periodic maintenance on clone environments
-                    performEnvironmentMaintenance()
-                    
-                    // Wait before next cycle
-                    delay(30000) // 30 seconds
-                }
+                // Remove the virtual context
+                runningClones.remove(cloneId)
+                
+                // Update the clone running status in the repository
+                cloneRepository.updateCloneRunningStatus(cloneId, false)
+                
+                Timber.d("Clone stopped: $cloneId")
             } catch (e: Exception) {
-                Timber.e(e, "Error monitoring clones")
+                Timber.e(e, "Failed to stop clone: $cloneId")
             }
+        }
+        
+        return true
+    }
+    
+    /**
+     * Stop all running clones
+     */
+    private fun stopAllClones() {
+        Timber.d("Stopping all clones")
+        
+        val cloneIds = runningClones.keys.toList()
+        cloneIds.forEach { cloneId ->
+            stopClone(cloneId)
         }
     }
     
     /**
-     * Perform maintenance on clone environments
+     * Set up the virtual environment for a clone
      */
-    private suspend fun performEnvironmentMaintenance() {
+    private fun setupVirtualEnvironment(cloneInfo: CloneInfo): Boolean {
         try {
-            // Get clones that need environment updates
-            val clonesToUpdate = cloneRepository.getClonesNeedingUpdate()
-            
-            for (clone in clonesToUpdate) {
-                Timber.d("Performing maintenance on clone ${clone.id}")
-                
-                // Check if the original app is still installed
-                if (virtualAppEngine.isCloneRunning(clone.id)) {
-                    // Skip maintenance for running clones
-                    continue
-                }
-                
-                // Update the environment version
-                cloneRepository.updateCloneEnvironmentVersion(clone.id)
+            // Set up the clone environment
+            if (!cloneEnvironment.setupEnvironment(cloneInfo)) {
+                Timber.e("Failed to set up environment for clone: ${cloneInfo.id}")
+                return false
             }
+            
+            // Prepare the app's APK
+            val apkPath = clonedAppInstaller.prepareCloneApk(cloneInfo.originalPackageName, cloneInfo.id)
+            if (apkPath == null) {
+                Timber.e("Failed to prepare APK for clone: ${cloneInfo.id}")
+                return false
+            }
+            
+            return true
         } catch (e: Exception) {
-            Timber.e(e, "Error performing environment maintenance")
+            Timber.e(e, "Failed to set up virtual environment for clone: ${cloneInfo.id}")
+            return false
+        }
+    }
+    
+    /**
+     * Get a virtual context for a clone
+     */
+    fun getVirtualContext(cloneId: String): VirtualContext? {
+        return runningClones[cloneId]
+    }
+    
+    /**
+     * Binder for local service connection
+     */
+    inner class LocalBinder : Binder() {
+        fun getService(): VirtualizationService = this@VirtualizationService
+    }
+    
+    /**
+     * Class representing a virtual context for a cloned app
+     */
+    inner class VirtualContext(val cloneInfo: CloneInfo) {
+        // In a real implementation, this would contain:
+        // - Redirected system service proxies
+        // - Isolated storage paths
+        // - Virtual environment configuration
+        
+        init {
+            Timber.d("VirtualContext created for clone: ${cloneInfo.id}")
         }
     }
 }

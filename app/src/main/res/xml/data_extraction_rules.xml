@@ -2,16 +2,10 @@
 <data-extraction-rules>
     <cloud-backup>
         <exclude domain="root" path="."/>
-        <exclude domain="file" path="clone_environments/"/>
-        <exclude domain="file" path="virtualization/"/>
-        <include domain="file" path="preferences/" />
-        <include domain="file" path="databases/" />
+        <exclude domain="file" path="virtual/"/>
     </cloud-backup>
     <device-transfer>
         <exclude domain="root" path="."/>
-        <exclude domain="file" path="clone_environments/"/>
-        <exclude domain="file" path="virtualization/"/>
-        <include domain="file" path="preferences/" />
-        <include domain="file" path="databases/" />
+        <exclude domain="file" path="virtual/"/>
     </device-transfer>
 </data-extraction-rules>

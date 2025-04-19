@@ -3,10 +3,9 @@ package com.multiclone.app.data.model
 import android.graphics.drawable.Drawable
 import android.os.Parcelable
 import kotlinx.parcelize.Parcelize
-import kotlinx.parcelize.RawValue
 
 /**
- * Represents information about an installed application
+ * Data class representing information about an installed app
  */
 @Parcelize
 data class AppInfo(
@@ -15,53 +14,31 @@ data class AppInfo(
     val versionName: String,
     val versionCode: Long,
     val isSystemApp: Boolean,
-    val icon: @RawValue Drawable?,
-    val firstInstallTime: Long,
-    val lastUpdateTime: Long,
-    val launchCount: Int = 0,
-    val lastLaunchTime: Long = 0
+    val installTime: Long,
+    val updateTime: Long,
+    val appSize: Long,
+    // Non-parcelable fields that don't need to be passed between components
+    @Transient var icon: Drawable? = null,
+    @Transient var isSelected: Boolean = false
 ) : Parcelable {
     
     /**
-     * Returns true if the app is cloneable
-     * Some system apps or apps with special permissions cannot be cloned
+     * Return a display-friendly version string
      */
-    fun isCloneable(): Boolean {
-        // Blacklist of non-cloneable packages
-        val nonCloneablePackages = listOf(
-            "com.multiclone.app",          // Don't clone itself
-            "com.android.systemui",         // System UI
-            "com.google.android.gsf",       // Google Services Framework
-            "com.google.android.gms",       // Google Play Services
-            "com.android.vending"           // Google Play Store
-        )
-        
-        // Check if package is in blacklist
-        if (packageName in nonCloneablePackages) {
-            return false
-        }
-        
-        // Additional checks for system apps - only allow certain system apps
-        if (isSystemApp) {
-            val allowedSystemApps = listOf(
-                "com.android.chrome",
-                "com.google.android.apps.maps",
-                "com.google.android.apps.photos"
-            )
-            return packageName in allowedSystemApps
-        }
-        
-        return true
+    fun getVersionString(): String {
+        return "$versionName ($versionCode)"
     }
     
-    override fun equals(other: Any?): Boolean {
-        if (this === other) return true
-        if (other !is AppInfo) return false
-        
-        return packageName == other.packageName
-    }
-    
-    override fun hashCode(): Int {
-        return packageName.hashCode()
+    /**
+     * Return a display-friendly size string
+     */
+    fun getSizeString(): String {
+        val sizeInMb = appSize / (1024L * 1024L)
+        return if (sizeInMb < 1) {
+            val sizeInKb = appSize / 1024L
+            "${sizeInKb}KB"
+        } else {
+            "${sizeInMb}MB"
+        }
     }
 }
