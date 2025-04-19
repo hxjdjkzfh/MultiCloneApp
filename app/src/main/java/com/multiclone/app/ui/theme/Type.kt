@@ -7,26 +7,22 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
 /**
- * Typography for the MultiClone app based on Material3 guidelines
+ * Typography for the MultiClone app, following Material Design 3 guidelines.
  */
 val Typography = Typography(
-    // Large titles, used for the largest headlines
+    // Display
     displayLarge = TextStyle(
         fontWeight = FontWeight.Normal,
         fontSize = 57.sp,
         lineHeight = 64.sp,
         letterSpacing = (-0.25).sp
     ),
-    
-    // Medium titles
     displayMedium = TextStyle(
         fontWeight = FontWeight.Normal,
         fontSize = 45.sp,
         lineHeight = 52.sp,
         letterSpacing = 0.sp
     ),
-    
-    // Small titles
     displaySmall = TextStyle(
         fontWeight = FontWeight.Normal,
         fontSize = 36.sp,
@@ -34,71 +30,59 @@ val Typography = Typography(
         letterSpacing = 0.sp
     ),
     
-    // Page headers, section titles
+    // Headline
     headlineLarge = TextStyle(
-        fontWeight = FontWeight.SemiBold,
+        fontWeight = FontWeight.Normal,
         fontSize = 32.sp,
         lineHeight = 40.sp,
         letterSpacing = 0.sp
     ),
-    
-    // Medium headers, primary page titles
     headlineMedium = TextStyle(
-        fontWeight = FontWeight.SemiBold,
+        fontWeight = FontWeight.Normal,
         fontSize = 28.sp,
         lineHeight = 36.sp,
         letterSpacing = 0.sp
     ),
-    
-    // Small headers, card titles
     headlineSmall = TextStyle(
-        fontWeight = FontWeight.SemiBold,
+        fontWeight = FontWeight.Normal,
         fontSize = 24.sp,
         lineHeight = 32.sp,
         letterSpacing = 0.sp
     ),
     
-    // Emphasized large text for top-level headers
+    // Title
     titleLarge = TextStyle(
-        fontWeight = FontWeight.SemiBold,
+        fontWeight = FontWeight.Medium,
         fontSize = 22.sp,
         lineHeight = 28.sp,
         letterSpacing = 0.sp
     ),
-    
-    // Primary titles in cards, dialogs
     titleMedium = TextStyle(
-        fontWeight = FontWeight.SemiBold,
+        fontWeight = FontWeight.Medium,
         fontSize = 16.sp,
         lineHeight = 24.sp,
         letterSpacing = 0.15.sp
     ),
-    
-    // Small titles, labels in containers
     titleSmall = TextStyle(
-        fontWeight = FontWeight.Bold,
+        fontWeight = FontWeight.Medium,
         fontSize = 14.sp,
         lineHeight = 20.sp,
         letterSpacing = 0.1.sp
     ),
     
-    // Main body text, descriptions
+    // Body
     bodyLarge = TextStyle(
         fontWeight = FontWeight.Normal,
         fontSize = 16.sp,
         lineHeight = 24.sp,
         letterSpacing = 0.5.sp
     ),
-    
-    // Standard body text in cards, dialogs
     bodyMedium = TextStyle(
         fontWeight = FontWeight.Normal,
         fontSize = 14.sp,
         lineHeight = 20.sp,
         letterSpacing = 0.25.sp
     ),
-    
-    // Small body text, captions
     bodySmall = TextStyle(
         fontWeight = FontWeight.Normal,
         fontSize = 12.sp,
@@ -106,23 +90,19 @@ val Typography = Typography(
         letterSpacing = 0.4.sp
     ),
     
-    // Button text, emphasized actions
+    // Label
     labelLarge = TextStyle(
         fontWeight = FontWeight.Medium,
         fontSize = 14.sp,
         lineHeight = 20.sp,
         letterSpacing = 0.1.sp
     ),
-    
-    // Secondary button text, tabs
     labelMedium = TextStyle(
         fontWeight = FontWeight.Medium,
         fontSize = 12.sp,
         lineHeight = 16.sp,
         letterSpacing = 0.5.sp
     ),
-    
-    // Smallest text for labels, badges
     labelSmall = TextStyle(
         fontWeight = FontWeight.Medium,
         fontSize = 11.sp,

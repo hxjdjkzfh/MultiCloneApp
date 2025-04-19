@@ -1,9 +1,10 @@
 package com.multiclone.app.di
 
 import android.content.Context
-import com.multiclone.app.core.virtualization.CloneEnvironment
-import com.multiclone.app.core.virtualization.ClonedAppInstaller
-import com.multiclone.app.core.virtualization.VirtualAppEngine
+import com.multiclone.app.data.repository.AppRepository
+import com.multiclone.app.data.repository.AppRepositoryImpl
+import com.multiclone.app.data.repository.CloneRepository
+import com.multiclone.app.data.repository.CloneRepositoryImpl
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -12,48 +13,31 @@ import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 
 /**
- * Dagger/Hilt module that provides repository and virtualization dependencies
+ * Dagger/Hilt module for providing repositories.
  */
 @Module
 @InstallIn(SingletonComponent::class)
 object RepositoryModule {
 
     /**
-     * Provides the CloneEnvironment instance
+     * Provides the AppRepository implementation.
      */
-    @Singleton
     @Provides
-    fun provideCloneEnvironment(
+    @Singleton
+    fun provideAppRepository(
         @ApplicationContext context: Context
-    ): CloneEnvironment {
-        return CloneEnvironment(context)
+    ): AppRepository {
+        return AppRepositoryImpl(context)
     }
 
     /**
-     * Provides the ClonedAppInstaller instance
+     * Provides the CloneRepository implementation.
      */
-    @Singleton
     @Provides
-    fun provideClonedAppInstaller(
+    @Singleton
+    fun provideCloneRepository(
         @ApplicationContext context: Context
-    ): ClonedAppInstaller {
-        return ClonedAppInstaller(context)
-    }
-
-    /**
-     * Provides the VirtualAppEngine instance
-     */
-    @Singleton
-    @Provides
-    fun provideVirtualAppEngine(
-        @ApplicationContext context: Context,
-        cloneEnvironment: CloneEnvironment,
-        clonedAppInstaller: ClonedAppInstaller
-    ): VirtualAppEngine {
-        return VirtualAppEngine(
-            context = context,
-            cloneEnvironment = cloneEnvironment,
-            clonedAppInstaller = clonedAppInstaller
-        )
+    ): CloneRepository {
+        return CloneRepositoryImpl(context)
     }
 }

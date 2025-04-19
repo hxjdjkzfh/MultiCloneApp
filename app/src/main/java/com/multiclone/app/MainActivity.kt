@@ -6,76 +6,57 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
-import androidx.navigation.compose.rememberNavController
-import com.multiclone.app.ui.theme.MultiCloneTheme
+import com.multiclone.app.data.repository.CloneRepository
 import com.multiclone.app.ui.screens.home.HomeScreen
-import com.multiclone.app.ui.screens.appselection.AppSelectionScreen
-import com.multiclone.app.ui.screens.settings.SettingsScreen
-import com.multiclone.app.ui.screens.about.AboutScreen
+import com.multiclone.app.ui.theme.MultiCloneTheme
 import dagger.hilt.android.AndroidEntryPoint
 import timber.log.Timber
+import javax.inject.Inject
 
 /**
- * Main Activity for the MultiClone App.
- * Sets up navigation and theming.
+ * Main activity for the MultiClone app.
+ * Serves as the entry point and hosts the Compose-based UI.
  */
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+    
+    @Inject
+    lateinit var cloneRepository: CloneRepository
+    
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
         Timber.d("MainActivity created")
+        
+        // Load clones when the app starts
+        loadClones()
         
         setContent {
             MultiCloneTheme {
-                // A surface container using the 'background' color from the theme
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    MultiCloneApp()
+                    // Navigation would be implemented here in a real app
+                    // For now, we'll just show the home screen
+                    HomeScreen(
+                        onNavigateToAppSelection = { /* Navigate to app selection */ },
+                        onNavigateToSettings = { /* Navigate to settings */ },
+                        onNavigateToAbout = { /* Navigate to about */ },
+                        onNavigateToEditClone = { /* Navigate to edit clone */ }
+                    )
                 }
             }
         }
     }
-}
-
-/**
- * Composable that builds the main navigation structure of the app
- */
-@Composable
-fun MultiCloneApp() {
-    val navController = rememberNavController()
     
-    NavHost(navController = navController, startDestination = "home") {
-        composable("home") {
-            HomeScreen(
-                onNavigateToAppSelection = { navController.navigate("appSelection") },
-                onNavigateToSettings = { navController.navigate("settings") },
-                onNavigateToAbout = { navController.navigate("about") }
-            )
-        }
-        composable("appSelection") {
-            AppSelectionScreen(
-                onNavigateBack = { navController.popBackStack() },
-                onAppSelected = { appId -> 
-                    // Navigate to clone config with app ID
-                    navController.popBackStack()
-                }
-            )
-        }
-        composable("settings") {
-            SettingsScreen(
-                onNavigateBack = { navController.popBackStack() }
-            )
-        }
-        composable("about") {
-            AboutScreen(
-                onNavigateBack = { navController.popBackStack() }
-            )
-        }
+    /**
+     * Loads clones from the repository
+     */
+    private fun loadClones() {
+        Timber.d("Loading clones from repository")
+        // Launch a coroutine to load clones
+        // This would be done by the view model in a real app
     }
 }

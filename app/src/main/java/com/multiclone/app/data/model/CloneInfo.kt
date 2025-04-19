@@ -1,116 +1,94 @@
 package com.multiclone.app.data.model
 
-import android.graphics.drawable.Drawable
-import androidx.compose.ui.graphics.Color
+import android.os.Parcelable
+import kotlinx.parcelize.Parcelize
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.Transient
-import java.io.File
+import java.util.UUID
 
 /**
- * Model class representing a cloned app.
- * Contains all relevant information about a cloned app.
+ * Represents a cloned application with additional configuration.
  */
+@Parcelize
 @Serializable
 data class CloneInfo(
-    // Basic information
-    val id: String,
+    /**
+     * Unique identifier for this clone.
+     */
+    val id: String = UUID.randomUUID().toString(),
+    
+    /**
+     * Package name of the original app.
+     */
     val packageName: String,
-    val originalAppName: String,
     
-    // Clone customization
-    val cloneName: String? = null,
-    val badgeColorHex: String? = null,
+    /**
+     * Custom name for this clone, defaults to the original app name.
+     */
+    val customName: String,
     
-    // Clone statistics
-    val creationTime: Long = System.currentTimeMillis(),
-    val lastLaunchTime: Long = 0,
+    /**
+     * Timestamp when this clone was created.
+     */
+    val createdAt: Long = System.currentTimeMillis(),
+    
+    /**
+     * Timestamp when this clone was last launched.
+     */
+    val lastLaunchedAt: Long = 0L,
+    
+    /**
+     * Count of how many times this clone has been launched.
+     */
     val launchCount: Int = 0,
     
-    // Clone settings
-    val isNotificationsEnabled: Boolean = true,
-    val customIcon: String? = null, // Path to custom icon file
-    
-    // Transient properties (not serialized)
-    @Transient
-    val originalAppIcon: Drawable? = null,
-    @Transient
-    val customIconDrawable: Drawable? = null
-) {
     /**
-     * Gets the display name for the clone.
-     * If a custom name is set, it returns that, otherwise returns the original app name.
+     * Theme color for this clone (in hex format).
      */
-    fun getDisplayName(): String {
-        return cloneName ?: "$originalAppName (Clone)"
+    val color: String = "#2196F3", // Default to Material Blue
+    
+    /**
+     * Whether storage should be isolated for this clone.
+     */
+    val isolateStorage: Boolean = true,
+    
+    /**
+     * Whether accounts should be isolated for this clone.
+     */
+    val isolateAccounts: Boolean = true,
+    
+    /**
+     * Whether location should be isolated for this clone.
+     */
+    val isolateLocation: Boolean = false,
+    
+    /**
+     * Whether a custom launcher shortcut should be created.
+     */
+    val createShortcut: Boolean = true,
+    
+    /**
+     * Additional flags for virtualization behavior.
+     */
+    val virtualizationFlags: Map<String, Boolean> = emptyMap(),
+    
+    /**
+     * Custom parameters for virtualization configuration.
+     */
+    val customParams: Map<String, String> = emptyMap()
+) : Parcelable {
+    /**
+     * Checks if two clones refer to the same cloned app.
+     */
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is CloneInfo) return false
+        return id == other.id
     }
-    
+
     /**
-     * Gets the badge color for the clone.
-     * If a custom color is set, it returns that, otherwise returns null.
+     * Generates a hash code based on the clone's ID.
      */
-    val badgeColor: Color?
-        get() = badgeColorHex?.let { hex ->
-            try {
-                Color(android.graphics.Color.parseColor(hex))
-            } catch (e: Exception) {
-                null
-            }
-        }
-    
-    /**
-     * Gets the clone directory path.
-     * This is where all clone-specific data is stored.
-     * 
-     * @param baseDir The base directory for all clones
-     * @return The directory for this specific clone
-     */
-    fun getCloneDirectory(baseDir: File): File {
-        return File(baseDir, id)
-    }
-    
-    /**
-     * Creates a new instance with updated launch statistics
-     */
-    fun updateLaunchStats(): CloneInfo {
-        return this.copy(
-            lastLaunchTime = System.currentTimeMillis(),
-            launchCount = launchCount + 1
-        )
-    }
-    
-    /**
-     * Creates a new instance with updated name
-     */
-    fun updateName(newName: String): CloneInfo {
-        return this.copy(
-            cloneName = newName
-        )
-    }
-    
-    /**
-     * Creates a new instance with updated badge color
-     */
-    fun updateBadgeColor(colorHex: String): CloneInfo {
-        return this.copy(
-            badgeColorHex = colorHex
-        )
-    }
-    
-    /**
-     * Creates a new instance with updated notification setting
-     */
-    fun updateNotificationSetting(enabled: Boolean): CloneInfo {
-        return this.copy(
-            isNotificationsEnabled = enabled
-        )
-    }
-    
-    /**
-     * Creates a new instance with updated custom icon
-     */
-    fun updateCustomIcon(iconPath: String?): CloneInfo {
-        return this.copy(
-            customIcon = iconPath
-        )
+    override fun hashCode(): Int {
+        return id.hashCode()
     }
 }

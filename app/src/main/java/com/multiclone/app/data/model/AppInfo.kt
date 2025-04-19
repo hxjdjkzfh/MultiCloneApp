@@ -1,81 +1,57 @@
 package com.multiclone.app.data.model
 
 import android.graphics.drawable.Drawable
+import android.os.Parcelable
+import kotlinx.parcelize.Parcelize
+import kotlinx.parcelize.RawValue
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
-import java.util.UUID
 
 /**
- * Model class representing an installed app on the device.
- * Contains all relevant information about an app that can be cloned.
+ * Represents information about an installed application.
  */
+@Parcelize
 @Serializable
 data class AppInfo(
+    /**
+     * Package name (unique identifier) of the application.
+     */
     val packageName: String,
+    
+    /**
+     * Display name of the application.
+     */
     val appName: String,
-    val versionName: String = "",
-    val versionCode: Long = 0,
-    val isSystemApp: Boolean = false,
-    val installTime: Long = 0,
-    val lastUpdateTime: Long = 0,
     
-    // Transient properties (not serialized)
+    /**
+     * Version name (human-readable) of the application.
+     */
+    val versionName: String,
+    
+    /**
+     * Version code (numeric) of the application.
+     */
+    val versionCode: Long,
+    
+    /**
+     * Whether this is a system application.
+     */
+    val isSystemApp: Boolean,
+    
+    /**
+     * First installation time in milliseconds since epoch.
+     */
+    val installTime: Long,
+    
+    /**
+     * Last update time in milliseconds since epoch.
+     */
+    val lastUpdateTime: Long,
+    
+    /**
+     * Icon drawable of the application.
+     * Transient because it cannot be serialized directly.
+     */
     @Transient
-    val appIcon: Drawable? = null
-) {
-    companion object {
-        /**
-         * Creates a simplified AppInfo with just the essential fields
-         */
-        fun createSimplified(
-            packageName: String,
-            appName: String
-        ): AppInfo {
-            return AppInfo(
-                packageName = packageName,
-                appName = appName
-            )
-        }
-    }
-    
-    /**
-     * Returns whether this app can be cloned
-     * System apps and special apps cannot be cloned
-     */
-    fun isCloneable(): Boolean {
-        // System apps are generally not cloneable
-        if (isSystemApp) return false
-        
-        // These are special packages that should not be cloned
-        val blacklistedPackages = listOf(
-            "com.multiclone.app", // This app itself
-            "com.android.", // Android system
-            "com.google.android.", // Google system
-            "android", // Android core
-            "com.sec.android." // Samsung system
-        )
-        
-        // Check if the package is in the blacklist
-        for (prefix in blacklistedPackages) {
-            if (packageName.startsWith(prefix)) {
-                return false
-            }
-        }
-        
-        return true
-    }
-    
-    /**
-     * Returns whether this app is from Google
-     */
-    fun isGoogleApp(): Boolean {
-        return packageName.startsWith("com.google.")
-    }
-    
-    /**
-     * Generates a unique clone ID based on the package name
-     */
-    fun generateCloneId(): String {
-        return UUID.randomUUID().toString()
-    }
-}
+    val appIcon: @RawValue Drawable? = null
+) : Parcelable

@@ -1,38 +1,43 @@
 package com.multiclone.app.di
 
 import android.content.Context
-import com.multiclone.app.MultiCloneApplication
-import com.multiclone.app.core.virtualization.CloneManagerService
+import com.multiclone.app.core.virtualization.VirtualAppEngine
+import com.multiclone.app.core.virtualization.VirtualAppEngineImpl
+import dagger.Binds
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
-import kotlinx.serialization.json.Json
 import javax.inject.Singleton
 
 /**
- * Main dependency injection module for the app
+ * Dagger Hilt module for providing app-level dependencies
  */
 @Module
 @InstallIn(SingletonComponent::class)
-object AppModule {
+abstract class AppModule {
     
     /**
-     * Provides JSON instance for serialization
+     * Binds the VirtualAppEngine implementation
      */
-    @Provides
+    @Binds
     @Singleton
-    fun provideJson(): Json {
-        return MultiCloneApplication.json
-    }
+    abstract fun bindVirtualAppEngine(
+        virtualAppEngineImpl: VirtualAppEngineImpl
+    ): VirtualAppEngine
     
     /**
-     * Provides the CloneManagerService wrapper
+     * Static providers for dependencies
      */
-    @Provides
-    @Singleton
-    fun provideCloneManagerService(impl: CloneManagerService.Impl): CloneManagerService.Impl {
-        return impl
+    companion object {
+        /**
+         * Provides application context
+         */
+        @Provides
+        @Singleton
+        fun provideContext(
+            @ApplicationContext context: Context
+        ): Context = context
     }
 }

@@ -1,33 +1,41 @@
 package com.multiclone.app.ui.screens.home
 
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Apps
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material3.*
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Button
+import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.multiclone.app.ui.components.CloneItem
-import com.multiclone.app.ui.components.EmptyState
-import com.multiclone.app.ui.components.LoadingOverlay
-import com.multiclone.app.ui.theme.MultiCloneTheme
+import com.multiclone.app.R
+import com.multiclone.app.ui.screens.home.components.CloneList
+import com.multiclone.app.ui.screens.home.components.EmptyState
 
 /**
- * The main home screen showing the user's cloned apps
- * and providing actions to manage them.
+ * Home screen component displaying the list of cloned apps.
+ * 
+ * @param onNavigateToAppSelection Callback to navigate to app selection screen
+ * @param onNavigateToSettings Callback to navigate to settings screen
+ * @param onNavigateToAbout Callback to navigate to about screen
+ * @param onNavigateToEditClone Callback to navigate to edit clone screen
+ * @param viewModel ViewModel for this screen (injected by Hilt)
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -38,129 +46,57 @@ fun HomeScreen(
     onNavigateToEditClone: (String) -> Unit,
     viewModel: HomeViewModel = hiltViewModel()
 ) {
+    // Collect state from the ViewModel
     val uiState by viewModel.uiState.collectAsState()
     
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
                 title = {
-                    Text("MultiClone")
+                    Text(text = stringResource(id = R.string.home_title))
                 },
                 actions = {
                     IconButton(onClick = onNavigateToSettings) {
                         Icon(
-                            imageVector = Icons.Default.Settings,
-                            contentDescription = "Settings"
+                            painter = painterResource(id = R.drawable.ic_launcher_foreground),
+                            contentDescription = stringResource(id = R.string.nav_settings)
                         )
                     }
-                    
                     IconButton(onClick = onNavigateToAbout) {
                         Icon(
-                            imageVector = Icons.Outlined.Info,
-                            contentDescription = "About"
+                            painter = painterResource(id = R.drawable.ic_launcher_foreground),
+                            contentDescription = stringResource(id = R.string.nav_about)
                         )
                     }
                 }
             )
         },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = onNavigateToAppSelection,
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Add,
-                    contentDescription = "Clone a new app"
-                )
-            }
-        },
-        content = { paddingValues ->
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues)
-            ) {
-                // Content based on state
-                when {
-                    uiState.isLoading -> {
-                        // Show loading state
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            CircularProgressIndicator()
-                        }
-                    }
-                    uiState.clones.isEmpty() -> {
-                        // Show empty state
-                        EmptyState(
-                            message = "You haven't cloned any apps yet. Tap the + button to get started!",
-                            icon = Icons.Default.Apps,
-                            buttonText = "Clone an App",
-                            onButtonClick = onNavigateToAppSelection,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    }
-                    else -> {
-                        // Show list of clones
-                        LazyColumn(
-                            modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(vertical = 8.dp)
-                        ) {
-                            items(uiState.clones) { clone ->
-                                CloneItem(
-                                    clone = clone,
-                                    onLaunchClick = { viewModel.launchClone(clone.id) },
-                                    onEditClick = { onNavigateToEditClone(clone.id) },
-                                    onDeleteClick = { viewModel.deleteClone(clone.id) }
-                                )
-                            }
-                        }
-                    }
-                }
-                
-                // Show loading overlay during operations
-                LoadingOverlay(
-                    isLoading = uiState.isOperationInProgress,
-                    message = uiState.operationMessage
-                )
-                
-                // Error message
-                if (uiState.errorMessage != null) {
-                    AlertDialog(
-                        onDismissRequest = { viewModel.dismissError() },
-                        title = { Text("Error") },
-                        text = { Text(uiState.errorMessage!!) },
-                        confirmButton = {
-                            TextButton(onClick = { viewModel.dismissError() }) {
-                                Text("OK")
-                            }
-                        }
-                    )
-                }
+            Button(onClick = onNavigateToAppSelection) {
+                Text(text = "+")
             }
         }
-    )
-}
-
-@Preview(showBackground = true)
-@Composable
-fun HomeScreenPreview() {
-    MultiCloneTheme {
+    ) { paddingValues ->
         Surface(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues),
             color = MaterialTheme.colorScheme.background
         ) {
-            val previewViewModel = HomeViewModel.createPreview()
-            
-            HomeScreen(
-                onNavigateToAppSelection = {},
-                onNavigateToSettings = {},
-                onNavigateToAbout = {},
-                onNavigateToEditClone = {},
-                viewModel = previewViewModel
-            )
+            if (uiState.clones.isEmpty()) {
+                // Show empty state
+                EmptyState(
+                    onCreateClone = onNavigateToAppSelection
+                )
+            } else {
+                // Show list of clones
+                CloneList(
+                    clones = uiState.clones,
+                    onCloneClick = viewModel::launchClone,
+                    onCloneEdit = onNavigateToEditClone,
+                    onCloneDelete = viewModel::deleteClone
+                )
+            }
         }
     }
 }

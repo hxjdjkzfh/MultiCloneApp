@@ -1,170 +1,159 @@
 package com.multiclone.app.core.virtualization
 
 import android.app.Service
-import android.content.BroadcastReceiver
-import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
+import android.os.Binder
 import android.os.IBinder
+import com.multiclone.app.data.model.CloneInfo
+import com.multiclone.app.data.repository.CloneRepository
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
 
 /**
- * Service responsible for managing clone lifecycle events.
- * This service:
- * - Monitors installed apps for updates
- * - Handles cleanup of clones when original apps are uninstalled
- * - Manages shortcuts for cloned apps
+ * Background service for managing clones.
+ * This service handles long-running operations related to clones,
+ * such as monitoring their state, synchronizing data, and handling events.
  */
 @AndroidEntryPoint
 class CloneManagerService : Service() {
+
+    companion object {
+        private const val TAG = "CloneManagerService"
+        
+        // Intent actions
+        const val ACTION_START_MONITORING = "com.multiclone.app.START_MONITORING"
+        const val ACTION_STOP_MONITORING = "com.multiclone.app.STOP_MONITORING"
+        const val ACTION_REFRESH_CLONES = "com.multiclone.app.REFRESH_CLONES"
+        
+        // Intent extras
+        const val EXTRA_CLONE_ID = "clone_id"
+    }
+    
+    // Service binder
+    private val binder = LocalBinder()
+    
+    // Coroutine scope for background operations
+    private val serviceScope = CoroutineScope(Dispatchers.IO + Job())
     
     @Inject
-    lateinit var cloneEnvironment: CloneEnvironment
-    
-    @Inject
-    lateinit var clonedAppInstaller: ClonedAppInstaller
+    lateinit var cloneRepository: CloneRepository
     
     @Inject
     lateinit var virtualAppEngine: VirtualAppEngine
     
-    private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-    
-    private val packageReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            val packageName = intent.data?.schemeSpecificPart ?: return
-            
-            when (intent.action) {
-                Intent.ACTION_PACKAGE_ADDED, Intent.ACTION_PACKAGE_REPLACED -> {
-                    Timber.d("Package updated: $packageName")
-                    handlePackageUpdated(packageName)
-                }
-                Intent.ACTION_PACKAGE_REMOVED -> {
-                    Timber.d("Package removed: $packageName")
-                    handlePackageRemoved(packageName)
-                }
-            }
-        }
-    }
-    
     override fun onCreate() {
         super.onCreate()
         Timber.d("CloneManagerService created")
-        
-        // Register for package changes
-        val filter = IntentFilter().apply {
-            addAction(Intent.ACTION_PACKAGE_ADDED)
-            addAction(Intent.ACTION_PACKAGE_REPLACED)
-            addAction(Intent.ACTION_PACKAGE_REMOVED)
-            addDataScheme("package")
-        }
-        registerReceiver(packageReceiver, filter)
-        
-        // Initialize clones management
-        initializeCloneManagement()
     }
     
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        Timber.d("CloneManagerService received start command")
+        Timber.d("CloneManagerService started with intent: $intent")
+        
+        intent?.let { handleIntent(it) }
+        
+        // Return sticky to restart the service if it's killed
         return START_STICKY
     }
     
-    override fun onBind(intent: Intent?): IBinder? {
-        // We don't provide binding
-        return null
+    override fun onBind(intent: Intent?): IBinder {
+        Timber.d("CloneManagerService bound")
+        return binder
     }
     
     override fun onDestroy() {
         Timber.d("CloneManagerService destroyed")
-        
-        // Unregister receiver
-        unregisterReceiver(packageReceiver)
-        
-        // Cancel coroutines
-        serviceScope.cancel()
-        
         super.onDestroy()
     }
     
     /**
-     * Initialize the clone management system
+     * Handles incoming intents
      */
-    private fun initializeCloneManagement() {
-        serviceScope.launch {
-            Timber.d("Initializing clone management")
-            
-            // In a real implementation, we would:
-            // 1. Load all existing clones from storage
-            // 2. Validate that their original apps are still installed
-            // 3. Check for updates to original apps that need to be propagated to clones
-            // 4. Update launchers and shortcuts
+    private fun handleIntent(intent: Intent) {
+        when (intent.action) {
+            ACTION_START_MONITORING -> {
+                val cloneId = intent.getStringExtra(EXTRA_CLONE_ID)
+                if (cloneId != null) {
+                    startMonitoring(cloneId)
+                }
+            }
+            ACTION_STOP_MONITORING -> {
+                val cloneId = intent.getStringExtra(EXTRA_CLONE_ID)
+                if (cloneId != null) {
+                    stopMonitoring(cloneId)
+                }
+            }
+            ACTION_REFRESH_CLONES -> {
+                refreshClones()
+            }
         }
     }
     
     /**
-     * Handle updates to packages that may be cloned
+     * Starts monitoring a clone
      */
-    private fun handlePackageUpdated(packageName: String) {
-        serviceScope.launch {
-            Timber.d("Handling update for package: $packageName")
-            
-            // In a real implementation, we would:
-            // 1. Find all clones of this package
-            // 2. Update the app in each clone's environment
-            // 3. Update any metadata or shortcuts
-        }
-    }
-    
-    /**
-     * Handle removal of packages that may be cloned
-     */
-    private fun handlePackageRemoved(packageName: String) {
-        serviceScope.launch {
-            Timber.d("Handling removal for package: $packageName")
-            
-            // In a real implementation, we would:
-            // 1. Find all clones of this package
-            // 2. Either delete the clones or mark them as "original uninstalled"
-            // 3. Update launchers and remove shortcuts
-        }
-    }
-    
-    /**
-     * Create a shortcut for a cloned app
-     */
-    private fun createShortcutForClone(cloneId: String, packageName: String, cloneName: String) {
-        Timber.d("Creating shortcut for clone $cloneId ($packageName)")
+    private fun startMonitoring(cloneId: String) {
+        Timber.d("Starting monitoring for clone: $cloneId")
         
-        // In a real implementation, we would:
-        // 1. Get app info (icon, etc.) from the original app
-        // 2. Create a shortcut intent that launches the clone
-        // 3. Add the shortcut to the launcher
+        serviceScope.launch {
+            try {
+                val clone = cloneRepository.getCloneById(cloneId)
+                if (clone == null) {
+                    Timber.e("Clone not found: $cloneId")
+                    return@launch
+                }
+                
+                // Implement monitoring logic here
+                // For example, check for updates, synchronize data, etc.
+                
+                Timber.d("Monitoring started for clone: $cloneId")
+            } catch (e: Exception) {
+                Timber.e(e, "Error starting monitoring for clone: $cloneId")
+            }
+        }
     }
     
     /**
-     * Remove a shortcut for a cloned app
+     * Stops monitoring a clone
      */
-    private fun removeShortcutForClone(cloneId: String, packageName: String) {
-        Timber.d("Removing shortcut for clone $cloneId ($packageName)")
+    private fun stopMonitoring(cloneId: String) {
+        Timber.d("Stopping monitoring for clone: $cloneId")
         
-        // In a real implementation, we would:
-        // 1. Find the shortcut for this clone
-        // 2. Remove it from the launcher
+        serviceScope.launch {
+            try {
+                // Implement logic to stop monitoring
+                
+                Timber.d("Monitoring stopped for clone: $cloneId")
+            } catch (e: Exception) {
+                Timber.e(e, "Error stopping monitoring for clone: $cloneId")
+            }
+        }
     }
     
-    companion object {
-        /**
-         * Start the CloneManagerService
-         */
-        fun start(context: Context) {
-            val intent = Intent(context, CloneManagerService::class.java)
-            context.startService(intent)
+    /**
+     * Refreshes the list of clones
+     */
+    private fun refreshClones() {
+        Timber.d("Refreshing clones")
+        
+        serviceScope.launch {
+            try {
+                cloneRepository.loadClones()
+                Timber.d("Clones refreshed")
+            } catch (e: Exception) {
+                Timber.e(e, "Error refreshing clones")
+            }
         }
+    }
+    
+    /**
+     * Local binder for binding to this service
+     */
+    inner class LocalBinder : Binder() {
+        fun getService(): CloneManagerService = this@CloneManagerService
     }
 }
