@@ -2,7 +2,7 @@ modules = ["kotlin", "java", "java-latest", "java-17", "openjdk-17"]
 
 [nix]
 channel = "stable-24_05"
-packages = ["gradle", "jdk11"]
+packages = ["gradle", "jdk11", "zip"]
 
 [workflows]
 runButton = "Project"

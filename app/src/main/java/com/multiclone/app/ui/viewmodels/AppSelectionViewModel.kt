@@ -1,163 +1,115 @@
 package com.multiclone.app.ui.viewmodels
 
-import android.content.Context
-import android.content.pm.ApplicationInfo
-import android.content.pm.PackageManager
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.multiclone.app.data.model.AppInfo
+import com.multiclone.app.domain.models.InstalledApp
+import com.multiclone.app.domain.usecase.GetInstalledAppsUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
-import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import timber.log.Timber
 import javax.inject.Inject
 
 /**
- * ViewModel for app selection screen
+ * UI state for the app selection screen
+ */
+data class AppSelectionState(
+    val installedApps: List<InstalledApp> = emptyList(),
+    val filteredApps: List<InstalledApp> = emptyList(),
+    val isLoading: Boolean = false,
+    val error: String? = null
+)
+
+/**
+ * ViewModel for the app selection screen
  */
 @HiltViewModel
 class AppSelectionViewModel @Inject constructor(
-    @ApplicationContext private val context: Context
+    private val getInstalledAppsUseCase: GetInstalledAppsUseCase
 ) : ViewModel() {
+
+    // Private full list of apps
+    private var allApps: List<InstalledApp> = emptyList()
     
-    // List of all installed apps
-    private val _apps = MutableStateFlow<List<AppInfo>>(emptyList())
-    val apps: StateFlow<List<AppInfo>> = _apps.asStateFlow()
-    
-    // Filtered apps based on search query
-    private val _filteredApps = MutableStateFlow<List<AppInfo>>(emptyList())
-    val filteredApps: StateFlow<List<AppInfo>> = _filteredApps.asStateFlow()
-    
-    // Current search query
-    private val _searchQuery = MutableStateFlow("")
-    val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
-    
-    // Loading state
-    private val _isLoading = MutableStateFlow(false)
-    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
-    
-    // Error message
-    private val _error = MutableStateFlow<String?>(null)
-    val error: StateFlow<String?> = _error.asStateFlow()
-    
+    // UI state exposed to the composable
+    private val _uiState = MutableStateFlow(AppSelectionState(isLoading = true))
+    val uiState: StateFlow<AppSelectionState> = _uiState.asStateFlow()
+
     init {
         loadInstalledApps()
     }
-    
+
     /**
-     * Load all installed apps from the device
+     * Load the list of installed apps on the device
      */
     fun loadInstalledApps() {
         viewModelScope.launch {
-            _isLoading.value = true
-            try {
-                val installedApps = fetchInstalledApps()
-                _apps.value = installedApps
-                // Initialize filtered apps with all apps
-                updateFilteredApps()
-            } catch (e: Exception) {
-                _error.value = "Error loading apps: ${e.message}"
-            } finally {
-                _isLoading.value = false
-            }
-        }
-    }
-    
-    /**
-     * Update search query and filter apps
-     */
-    fun updateSearchQuery(query: String) {
-        viewModelScope.launch {
-            _searchQuery.value = query
-            updateFilteredApps()
-        }
-    }
-    
-    /**
-     * Filter apps based on current search query
-     */
-    private fun updateFilteredApps() {
-        val query = _searchQuery.value.trim().lowercase()
-        
-        _filteredApps.value = if (query.isEmpty()) {
-            _apps.value
-        } else {
-            _apps.value.filter {
-                it.appName.lowercase().contains(query) ||
-                it.packageName.lowercase().contains(query)
-            }
-        }
-    }
-    
-    /**
-     * Clear the error message
-     */
-    fun clearError() {
-        _error.value = null
-    }
-    
-    /**
-     * Fetch all installed apps from the device
-     */
-    private suspend fun fetchInstalledApps(): List<AppInfo> = withContext(Dispatchers.IO) {
-        val packageManager = context.packageManager
-        val installedApps = mutableListOf<AppInfo>()
-        
-        try {
-            // For API 33+ consider using PackageManager.getInstalledApplications(PackageManager.ApplicationInfoFlags.of(0))
-            val applications = packageManager.getInstalledApplications(PackageManager.GET_META_DATA)
+            _uiState.update { it.copy(isLoading = true, error = null) }
             
-            for (applicationInfo in applications) {
-                // Skip system apps if not in launchable apps
-                if (isSystemApp(applicationInfo) && !isLaunchableApp(packageManager, applicationInfo.packageName)) {
-                    continue
+            try {
+                allApps = getInstalledAppsUseCase().filter { !it.isSelfApp }
+                _uiState.update { 
+                    it.copy(
+                        installedApps = allApps,
+                        isLoading = false
+                    )
                 }
-                
-                // Skip our own app
-                if (applicationInfo.packageName == context.packageName) {
-                    continue
+                Timber.d("Loaded ${allApps.size} installed apps")
+            } catch (e: Exception) {
+                Timber.e(e, "Error loading installed apps")
+                _uiState.update { 
+                    it.copy(
+                        isLoading = false,
+                        error = "Failed to load apps: ${e.message}"
+                    )
                 }
-                
-                val appName = applicationInfo.loadLabel(packageManager).toString()
-                val packageInfo = packageManager.getPackageInfo(applicationInfo.packageName, 0)
-                
-                val appInfo = AppInfo(
-                    packageName = applicationInfo.packageName,
-                    appName = appName,
-                    versionName = packageInfo.versionName ?: "",
-                    versionCode = packageInfo.longVersionCode,
-                    isSystemApp = isSystemApp(applicationInfo),
-                    appIcon = applicationInfo.loadIcon(packageManager)
-                )
-                
-                installedApps.add(appInfo)
             }
-        } catch (e: Exception) {
-            // Handle errors
         }
-        
-        // Sort alphabetically by app name
-        installedApps.sortBy { it.appName.lowercase() }
-        
-        return@withContext installedApps
     }
-    
+
     /**
-     * Check if an app is a system app
+     * Search for apps matching the given query
      */
-    private fun isSystemApp(applicationInfo: ApplicationInfo): Boolean {
-        return (applicationInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
+    fun searchApps(query: String) {
+        viewModelScope.launch {
+            if (query.isBlank()) {
+                _uiState.update { it.copy(installedApps = allApps) }
+                return@launch
+            }
+            
+            val lowercaseQuery = query.lowercase()
+            val filtered = allApps.filter { app ->
+                app.appName.lowercase().contains(lowercaseQuery) ||
+                app.packageName.lowercase().contains(lowercaseQuery)
+            }
+            
+            _uiState.update { it.copy(installedApps = filtered) }
+            Timber.d("Filtered to ${filtered.size} apps matching '$query'")
+        }
     }
-    
+
     /**
-     * Check if an app can be launched
+     * Sort apps by the given criteria
      */
-    private fun isLaunchableApp(packageManager: PackageManager, packageName: String): Boolean {
-        val intent = packageManager.getLaunchIntentForPackage(packageName)
-        return intent != null
+    fun sortApps(sortBy: AppSortOption) {
+        viewModelScope.launch {
+            val sortedApps = when (sortBy) {
+                AppSortOption.NAME -> allApps.sortedBy { it.appName }
+                AppSortOption.PACKAGE -> allApps.sortedBy { it.packageName }
+                AppSortOption.CLONEABILITY -> allApps.sortedByDescending { it.canBeCloned }
+            }
+            
+            _uiState.update { it.copy(installedApps = sortedApps) }
+        }
     }
+}
+
+/**
+ * Sorting options for the app list
+ */
+enum class AppSortOption {
+    NAME, PACKAGE, CLONEABILITY
 }

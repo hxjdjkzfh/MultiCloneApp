@@ -1,9 +1,7 @@
 package com.multiclone.app.di
 
 import android.content.Context
-import com.multiclone.app.core.virtualization.VirtualAppEngine
-import com.multiclone.app.core.virtualization.VirtualAppEngineImpl
-import dagger.Binds
+import com.multiclone.app.virtualization.VirtualAppEngine
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -12,32 +10,20 @@ import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 
 /**
- * Dagger Hilt module for providing app-level dependencies
+ * Dagger Hilt module for application-level dependencies.
  */
 @Module
 @InstallIn(SingletonComponent::class)
-abstract class AppModule {
-    
+object AppModule {
+
     /**
-     * Binds the VirtualAppEngine implementation
+     * Provides the Virtual App Engine that handles app cloning and virtualization.
      */
-    @Binds
+    @Provides
     @Singleton
-    abstract fun bindVirtualAppEngine(
-        virtualAppEngineImpl: VirtualAppEngineImpl
-    ): VirtualAppEngine
-    
-    /**
-     * Static providers for dependencies
-     */
-    companion object {
-        /**
-         * Provides application context
-         */
-        @Provides
-        @Singleton
-        fun provideContext(
-            @ApplicationContext context: Context
-        ): Context = context
+    fun provideVirtualAppEngine(
+        @ApplicationContext context: Context
+    ): VirtualAppEngine {
+        return VirtualAppEngine(context)
     }
 }

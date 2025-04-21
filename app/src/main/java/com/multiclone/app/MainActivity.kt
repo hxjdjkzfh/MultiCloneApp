@@ -7,56 +7,50 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
-import com.multiclone.app.data.repository.CloneRepository
-import com.multiclone.app.ui.screens.home.HomeScreen
-import com.multiclone.app.ui.theme.MultiCloneTheme
+import androidx.lifecycle.lifecycleScope
+import com.multiclone.app.navigation.AppNavigation
+import com.multiclone.app.ui.theme.MultiCloneAppTheme
 import dagger.hilt.android.AndroidEntryPoint
-import timber.log.Timber
-import javax.inject.Inject
+import kotlinx.coroutines.launch
 
-/**
- * Main activity for the MultiClone app.
- * Serves as the entry point and hosts the Compose-based UI.
- */
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
-    
-    @Inject
-    lateinit var cloneRepository: CloneRepository
-    
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        Timber.d("MainActivity created")
-        
-        // Load clones when the app starts
-        loadClones()
+        // Initialize app components
+        initializeComponents()
         
         setContent {
-            MultiCloneTheme {
+            MultiCloneAppTheme {
+                // A surface container using the 'background' color from the theme
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    // Navigation would be implemented here in a real app
-                    // For now, we'll just show the home screen
-                    HomeScreen(
-                        onNavigateToAppSelection = { /* Navigate to app selection */ },
-                        onNavigateToSettings = { /* Navigate to settings */ },
-                        onNavigateToAbout = { /* Navigate to about */ },
-                        onNavigateToEditClone = { /* Navigate to edit clone */ }
-                    )
+                    AppNavigation()
                 }
             }
         }
     }
     
-    /**
-     * Loads clones from the repository
-     */
-    private fun loadClones() {
-        Timber.d("Loading clones from repository")
-        // Launch a coroutine to load clones
-        // This would be done by the view model in a real app
+    private fun initializeComponents() {
+        lifecycleScope.launch {
+            // Any initialization needed for app components
+            // For example, checking permissions, initializing services, etc.
+        }
+    }
+    
+    // Handle back press using the new Android 14 back press API
+    @androidx.annotation.OptIn(androidx.activity.BackEventCompat::class)
+    override fun onBackPressed() {
+        if (android.os.Build.VERSION.SDK_INT >= 34) {
+            // Let the system handle it for Android 14+
+            super.onBackPressed()
+        } else {
+            // For pre-Android 14 devices
+            @Suppress("DEPRECATION")
+            super.onBackPressed()
+        }
     }
 }

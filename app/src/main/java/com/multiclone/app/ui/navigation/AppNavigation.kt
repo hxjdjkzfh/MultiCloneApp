@@ -1,109 +1,81 @@
 package com.multiclone.app.ui.navigation
 
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
-import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import com.multiclone.app.ui.screens.about.AboutScreen
 import com.multiclone.app.ui.screens.appselection.AppSelectionScreen
 import com.multiclone.app.ui.screens.clonesetup.CloneSetupScreen
 import com.multiclone.app.ui.screens.home.HomeScreen
-import com.multiclone.app.ui.screens.settings.SettingsScreen
 
 /**
- * Main navigation graph for the app
+ * Navigation routes for the application.
+ */
+object Routes {
+    const val HOME = "home"
+    const val APP_SELECTION = "app_selection"
+    const val CLONE_SETUP = "clone_setup/{packageName}"
+    
+    // Helper function to create a CLONE_SETUP route with a specific package name
+    fun cloneSetupRoute(packageName: String): String {
+        return "clone_setup/$packageName"
+    }
+}
+
+/**
+ * Main navigation component for the app.
+ * Sets up navigation routes between different screens.
  */
 @Composable
-fun AppNavigation(
-    modifier: Modifier = Modifier,
-    navController: NavHostController = rememberNavController(),
-    startDestination: String = AppDestinations.HOME_ROUTE
-) {
-    NavHost(
-        navController = navController,
-        startDestination = startDestination,
-        modifier = modifier
-    ) {
-        // Home screen
-        composable(AppDestinations.HOME_ROUTE) {
+fun AppNavigation(navController: NavHostController) {
+    NavHost(navController = navController, startDestination = Routes.HOME) {
+        // Home screen - main dashboard for managing cloned apps
+        composable(Routes.HOME) {
             HomeScreen(
-                onNavigateToAppSelection = {
-                    navController.navigate(AppDestinations.APP_SELECTION_ROUTE)
+                onAddNewClone = {
+                    navController.navigate(Routes.APP_SELECTION)
                 },
-                onNavigateToSettings = {
-                    navController.navigate(AppDestinations.SETTINGS_ROUTE)
-                },
-                onNavigateToAbout = {
-                    navController.navigate(AppDestinations.ABOUT_ROUTE)
-                },
-                onNavigateToEditClone = { cloneId ->
-                    navController.navigate("${AppDestinations.EDIT_CLONE_ROUTE}/$cloneId")
-                }
+                onCloneSelected = { /* TODO: Add clone management */ }
             )
         }
         
-        // App selection screen
-        composable(AppDestinations.APP_SELECTION_ROUTE) {
+        // App selection screen - for choosing which app to clone
+        composable(Routes.APP_SELECTION) {
             AppSelectionScreen(
-                onNavigateBack = { navController.popBackStack() },
-                onNavigateToCloneSetup = { packageName ->
-                    navController.navigate("${AppDestinations.CLONE_SETUP_ROUTE}/$packageName")
+                onAppSelected = { packageName ->
+                    navController.navigate(Routes.cloneSetupRoute(packageName))
+                },
+                onBackPressed = {
+                    navController.popBackStack()
                 }
             )
         }
         
-        // Clone setup screen
+        // Clone setup screen - for configuring clone settings
         composable(
-            route = "${AppDestinations.CLONE_SETUP_ROUTE}/{packageName}",
+            Routes.CLONE_SETUP,
             arguments = listOf(
-                navArgument("packageName") { type = NavType.StringType }
+                navArgument("packageName") {
+                    type = NavType.StringType
+                }
             )
         ) { backStackEntry ->
             val packageName = backStackEntry.arguments?.getString("packageName") ?: ""
-            
             CloneSetupScreen(
                 packageName = packageName,
-                onNavigateBack = { navController.popBackStack() },
-                onCloneCreated = { _ ->
-                    // Pop back to home screen
-                    navController.popBackStack(AppDestinations.HOME_ROUTE, false)
+                onBackPressed = {
+                    navController.popBackStack()
+                },
+                onSetupComplete = {
+                    // Navigate back to home screen after clone is created
+                    navController.navigate(Routes.HOME) {
+                        // Clear backstack up to home
+                        popUpTo(Routes.HOME) { inclusive = true }
+                    }
                 }
             )
-        }
-        
-        // Settings screen
-        composable(AppDestinations.SETTINGS_ROUTE) {
-            SettingsScreen(
-                onNavigateBack = { navController.popBackStack() },
-                onNavigateToAbout = {
-                    navController.navigate(AppDestinations.ABOUT_ROUTE)
-                }
-            )
-        }
-        
-        // About screen
-        composable(AppDestinations.ABOUT_ROUTE) {
-            AboutScreen(
-                onNavigateBack = { navController.popBackStack() }
-            )
-        }
-        
-        // Edit clone screen (currently reuses the same screen as clone setup)
-        composable(
-            route = "${AppDestinations.EDIT_CLONE_ROUTE}/{cloneId}",
-            arguments = listOf(
-                navArgument("cloneId") { type = NavType.StringType }
-            )
-        ) { backStackEntry ->
-            val cloneId = backStackEntry.arguments?.getString("cloneId") ?: ""
-            
-            // This will be implemented in the future
-            // For now, just go back
-            navController.popBackStack()
         }
     }
 }

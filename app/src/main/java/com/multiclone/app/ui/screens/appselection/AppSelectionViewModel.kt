@@ -2,200 +2,107 @@ package com.multiclone.app.ui.screens.appselection
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.multiclone.app.data.model.AppInfo
-import com.multiclone.app.data.repository.AppRepository
+import com.multiclone.app.domain.models.AppInfo
+import com.multiclone.app.virtualization.VirtualAppEngine
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
 
 /**
- * UI state for the app selection screen
+ * UI states for the App Selection screen
  */
-data class AppSelectionUiState(
-    val isLoading: Boolean = true,
-    val allApps: List<AppInfo> = emptyList(),
-    val filteredApps: List<AppInfo> = emptyList(),
-    val selectedPackageName: String? = null,
-    val isCreatingClone: Boolean = false,
-    val errorMessage: String? = null
-)
+sealed class AppSelectionUiState {
+    object Loading : AppSelectionUiState()
+    data class Success(val apps: List<AppInfo>) : AppSelectionUiState()
+    data class Error(val message: String) : AppSelectionUiState()
+}
 
 /**
- * ViewModel for the app selection screen
+ * ViewModel for the app selection screen.
+ * Handles loading installed apps and filtering.
  */
 @HiltViewModel
 class AppSelectionViewModel @Inject constructor(
-    private val appRepository: AppRepository
+    private val virtualAppEngine: VirtualAppEngine
 ) : ViewModel() {
-    
-    // Private mutable state flow
-    private val _uiState = MutableStateFlow(AppSelectionUiState())
-    
-    // Public immutable state flow
+
+    private val _uiState = MutableStateFlow<AppSelectionUiState>(AppSelectionUiState.Loading)
     val uiState: StateFlow<AppSelectionUiState> = _uiState.asStateFlow()
     
+    // List of all available apps
+    private var allApps: List<AppInfo> = emptyList()
+    
+    // Current filter query
+    private var currentQuery: String = ""
+    
     init {
-        // Load apps when ViewModel is created
         loadInstalledApps()
     }
     
     /**
-     * Loads all installed apps from the repository
+     * Loads all installed apps that can be cloned
      */
     private fun loadInstalledApps() {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true) }
-            
             try {
-                val installedApps = appRepository.getInstalledApps()
+                _uiState.value = AppSelectionUiState.Loading
                 
-                // Filter to keep only apps that can be cloned
-                val cloneableApps = installedApps.filter { it.isCloneable() }
+                // Initialize the virtual app engine
+                virtualAppEngine.initialize()
                 
-                // Sort by app name
-                val sortedApps = cloneableApps.sortedBy { it.appName.lowercase() }
+                // Get all cloneable apps
+                allApps = virtualAppEngine.getCloneableApps()
                 
-                _uiState.update { 
-                    it.copy(
-                        isLoading = false,
-                        allApps = sortedApps,
-                        filteredApps = sortedApps
-                    )
-                }
+                // Apply any existing filter
+                applyFilter(currentQuery)
+                
             } catch (e: Exception) {
                 Timber.e(e, "Error loading installed apps")
-                _uiState.update { 
-                    it.copy(
-                        isLoading = false,
-                        errorMessage = "Error loading apps: ${e.message}"
-                    )
-                }
+                _uiState.value = AppSelectionUiState.Error(
+                    e.message ?: "Failed to load installed apps"
+                )
             }
         }
     }
     
     /**
-     * Filters the app list based on search query
+     * Filters the app list based on a search query
      */
     fun filterApps(query: String) {
-        viewModelScope.launch {
-            val currentState = _uiState.value
-            
-            // Don't filter if apps haven't been loaded yet
-            if (currentState.allApps.isEmpty()) return@launch
-            
-            if (query.isBlank()) {
-                // No filter, show all apps
-                _uiState.update { it.copy(filteredApps = it.allApps) }
-            } else {
-                // Filter by app name or package name
-                val lowerQuery = query.lowercase()
-                val filtered = currentState.allApps.filter { app ->
-                    app.appName.lowercase().contains(lowerQuery) ||
-                    app.packageName.lowercase().contains(lowerQuery)
-                }
-                _uiState.update { it.copy(filteredApps = filtered) }
+        currentQuery = query
+        applyFilter(query)
+    }
+    
+    /**
+     * Applies the current filter to the app list
+     */
+    private fun applyFilter(query: String) {
+        if (allApps.isEmpty()) {
+            _uiState.value = AppSelectionUiState.Success(emptyList())
+            return
+        }
+        
+        if (query.isBlank()) {
+            // No filter, show all apps
+            _uiState.value = AppSelectionUiState.Success(allApps)
+        } else {
+            // Filter based on name or package
+            val filtered = allApps.filter { app ->
+                app.appName.contains(query, ignoreCase = true) ||
+                        app.packageName.contains(query, ignoreCase = true)
             }
+            _uiState.value = AppSelectionUiState.Success(filtered)
         }
     }
     
     /**
-     * Selects an app to clone
+     * Refreshes the list of apps
      */
-    fun selectApp(packageName: String) {
-        viewModelScope.launch {
-            // Find the app in our list
-            val app = _uiState.value.allApps.find { it.packageName == packageName }
-            
-            if (app != null) {
-                _uiState.update { it.copy(selectedPackageName = packageName) }
-            } else {
-                _uiState.update {
-                    it.copy(
-                        errorMessage = "Selected app not found"
-                    )
-                }
-            }
-        }
-    }
-    
-    /**
-     * Clears the current app selection
-     */
-    fun clearSelection() {
-        _uiState.update { it.copy(selectedPackageName = null) }
-    }
-    
-    /**
-     * Dismisses the current error message
-     */
-    fun dismissError() {
-        _uiState.update { it.copy(errorMessage = null) }
-    }
-    
-    companion object {
-        /**
-         * Creates a preview version of the ViewModel with sample data
-         */
-        fun createPreview(): AppSelectionViewModel {
-            val mockRepository = object : AppRepository {
-                override suspend fun getInstalledApps(): List<AppInfo> {
-                    return listOf(
-                        AppInfo.createSimplified(
-                            packageName = "com.example.app1",
-                            appName = "Example App 1"
-                        ),
-                        AppInfo.createSimplified(
-                            packageName = "com.example.app2",
-                            appName = "Example App 2"
-                        ),
-                        AppInfo.createSimplified(
-                            packageName = "com.example.app3",
-                            appName = "Example App 3"
-                        )
-                    )
-                }
-                
-                override suspend fun getAppInfo(packageName: String): AppInfo? {
-                    return when (packageName) {
-                        "com.example.app1" -> AppInfo.createSimplified(
-                            packageName = "com.example.app1",
-                            appName = "Example App 1"
-                        )
-                        "com.example.app2" -> AppInfo.createSimplified(
-                            packageName = "com.example.app2",
-                            appName = "Example App 2"
-                        )
-                        "com.example.app3" -> AppInfo.createSimplified(
-                            packageName = "com.example.app3",
-                            appName = "Example App 3"
-                        )
-                        else -> null
-                    }
-                }
-                
-                override suspend fun isAppInstalled(packageName: String): Boolean {
-                    return packageName.startsWith("com.example.")
-                }
-            }
-            
-            return AppSelectionViewModel(mockRepository).apply {
-                viewModelScope.launch {
-                    val apps = mockRepository.getInstalledApps()
-                    _uiState.update {
-                        it.copy(
-                            isLoading = false,
-                            allApps = apps,
-                            filteredApps = apps
-                        )
-                    }
-                }
-            }
-        }
+    fun refreshApps() {
+        loadInstalledApps()
     }
 }

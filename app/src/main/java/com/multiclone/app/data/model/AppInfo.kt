@@ -1,57 +1,22 @@
 package com.multiclone.app.data.model
 
 import android.graphics.drawable.Drawable
-import android.os.Parcelable
-import kotlinx.parcelize.Parcelize
-import kotlinx.parcelize.RawValue
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.Transient
 
 /**
- * Represents information about an installed application.
+ * Data class containing information about an installed application.
+ * 
+ * @property packageName The package name of the app (com.example.app)
+ * @property appName The display name of the app
+ * @property versionName The version name of the app (e.g., "1.0.0")
+ * @property versionCode The version code of the app (e.g., 10)
+ * @property appIcon The icon drawable for the app, or null if unavailable
+ * @property isSystemApp Whether the app is a system app
  */
-@Parcelize
-@Serializable
 data class AppInfo(
-    /**
-     * Package name (unique identifier) of the application.
-     */
     val packageName: String,
-    
-    /**
-     * Display name of the application.
-     */
     val appName: String,
-    
-    /**
-     * Version name (human-readable) of the application.
-     */
     val versionName: String,
-    
-    /**
-     * Version code (numeric) of the application.
-     */
     val versionCode: Long,
-    
-    /**
-     * Whether this is a system application.
-     */
-    val isSystemApp: Boolean,
-    
-    /**
-     * First installation time in milliseconds since epoch.
-     */
-    val installTime: Long,
-    
-    /**
-     * Last update time in milliseconds since epoch.
-     */
-    val lastUpdateTime: Long,
-    
-    /**
-     * Icon drawable of the application.
-     * Transient because it cannot be serialized directly.
-     */
-    @Transient
-    val appIcon: @RawValue Drawable? = null
-) : Parcelable
+    val appIcon: Drawable? = null,
+    val isSystemApp: Boolean = false
+)

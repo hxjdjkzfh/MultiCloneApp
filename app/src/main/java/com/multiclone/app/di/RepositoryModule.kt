@@ -13,14 +13,17 @@ import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 
 /**
- * Dagger/Hilt module for providing repositories.
+ * Hilt module that provides repository dependencies.
  */
 @Module
 @InstallIn(SingletonComponent::class)
 object RepositoryModule {
-
+    
     /**
-     * Provides the AppRepository implementation.
+     * Provides AppRepository implementation.
+     * 
+     * @param context The application context
+     * @return An implementation of AppRepository
      */
     @Provides
     @Singleton
@@ -29,9 +32,12 @@ object RepositoryModule {
     ): AppRepository {
         return AppRepositoryImpl(context)
     }
-
+    
     /**
-     * Provides the CloneRepository implementation.
+     * Provides CloneRepository implementation.
+     * 
+     * @param context The application context
+     * @return An implementation of CloneRepository
      */
     @Provides
     @Singleton
