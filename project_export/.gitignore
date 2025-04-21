@@ -1,0 +1,21 @@
+# Android SDK and environment related
+Android/
+*.zip
+.gradle/
+build/
+.cache/
+.local/
+tmp/
+
+# Local configuration
+local.properties
+
+# Generated files
+*.apk
+*.aab
+*.class
+*.log
+
+# Keystore files
+*.jks
+*.keystore
