@@ -1,37 +1,22 @@
-*.iml
-.gradle
-/local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
-.DS_Store
-/build
-/captures
-.externalNativeBuild
-.cxx
-local.properties
-*.apk
-*.aab
-*.aar
-.dagger
-/app/debug
-/app/build/
+# Android SDK and environment related
+Android/sdk/
+Android/
+*.zip
+.gradle/
+build/
+.cache/
+.local/
+tmp/
 
-# Android SDK folder
-/Android/
-/Android/sdk/
+# Local configuration
+local.properties
 
 # Generated files
-/app/build/generated/
-/app/build/tmp/
+*.apk
+*.aab
+*.class
+*.log
 
-# Specific to Replit
-.config
-.breakpoints
-replit.nix
-.replit
-virtualization_components/
-virtualization_components.zip
+# Keystore files
+*.jks
+*.keystore
